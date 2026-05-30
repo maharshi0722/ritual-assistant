@@ -192,6 +192,14 @@ export default function ChatApp() {
                 send(s);
                 setSidebarOpen(false);
               }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--green-pale)";
+                e.currentTarget.style.color = "var(--green)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--ink-soft)";
+              }}
             >
               {s}
             </button>
@@ -218,6 +226,16 @@ export default function ChatApp() {
               setMessages([]);
               setSources([]);
               setSidebarOpen(false);
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--green-pale)";
+              e.currentTarget.style.borderColor = "var(--green)";
+              e.currentTarget.style.color = "var(--green)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "var(--border-strong)";
+              e.currentTarget.style.color = "var(--ink-muted)";
             }}
           >
             Clear conversation
@@ -281,7 +299,23 @@ export default function ChatApp() {
               </p>
               <div style={S.suggGrid}>
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} style={S.suggCard} onClick={() => send(s)}>
+                  <button
+                    key={s}
+                    style={S.suggCard}
+                    onClick={() => send(s)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--green)";
+                      e.currentTarget.style.background = "var(--green-pale)";
+                      e.currentTarget.style.boxShadow = "var(--shadow-md)";
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border)";
+                      e.currentTarget.style.background = "var(--white)";
+                      e.currentTarget.style.boxShadow = "var(--shadow-sm)";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
+                  >
                     <span style={S.suggArrow}>→</span>
                     <span>{s}</span>
                   </button>
@@ -350,7 +384,22 @@ export default function ChatApp() {
 
         {/* Input bar */}
         <div style={S.inputBar}>
-          <div style={S.inputWrap}>
+          <div
+            style={S.inputWrap}
+            onFocus={(e) => {
+              if (e.target.tagName === "TEXTAREA") {
+                e.currentTarget.style.borderColor = "var(--green)";
+                e.currentTarget.style.boxShadow =
+                  "var(--shadow-lg), 0 0 0 3px var(--green-pale)";
+              }
+            }}
+            onBlur={(e) => {
+              if (e.target.tagName === "TEXTAREA") {
+                e.currentTarget.style.borderColor = "var(--border)";
+                e.currentTarget.style.boxShadow = "var(--shadow-sm)";
+              }
+            }}
+          >
             <textarea
               ref={textareaRef}
               value={input}
@@ -364,6 +413,14 @@ export default function ChatApp() {
             <button
               onClick={handleSubmit}
               disabled={!input.trim() || loading}
+              onMouseEnter={(e) => {
+                if (!loading && input.trim()) {
+                  e.currentTarget.style.transform = "scale(1.05)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
+              }}
               style={{
                 ...S.sendBtn,
                 opacity: !input.trim() || loading ? 0.4 : 1,
@@ -407,7 +464,7 @@ const S = {
     position: "relative",
   },
 
-  // Sidebar
+  // Sidebar - Premium
   sidebar: {
     position: "fixed",
     left: 0,
@@ -417,83 +474,91 @@ const S = {
     background: "var(--white)",
     borderRight: "1px solid var(--border)",
     zIndex: 50,
-    transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)",
+    transition: "transform var(--transition-base)",
     display: "flex",
     flexDirection: "column",
     padding: "0 0 20px",
-    boxShadow: "var(--shadow-md)",
+    boxShadow: "var(--shadow-lg)",
     overflowY: "auto",
   },
   sidebarHeader: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     padding: "20px 20px 16px",
     borderBottom: "1px solid var(--border)",
     marginBottom: 8,
   },
   sidebarLogo: { width: 32, height: 32, objectFit: "contain" },
   sidebarTitle: {
-    fontFamily: "var(--font-serif)",
-    fontSize: "1rem",
-    fontWeight: 600,
+    fontSize: "1.05rem",
+    fontWeight: 700,
     color: "var(--ink)",
+    letterSpacing: "-0.01em",
   },
-  sidebarSection: { padding: "12px 16px" },
+  sidebarSection: { padding: "14px 16px" },
   sidebarLabel: {
-    fontSize: "0.68rem",
-    fontWeight: 600,
-    letterSpacing: "0.08em",
+    fontSize: "0.65rem",
+    fontWeight: 700,
+    letterSpacing: "0.12em",
     color: "var(--ink-faint)",
-    marginBottom: 8,
+    marginBottom: 10,
+    textTransform: "uppercase",
   },
   sidebarBtn: {
     display: "block",
     width: "100%",
     textAlign: "left",
-    background: "none",
+    background: "transparent",
     border: "none",
-    padding: "8px 10px",
+    padding: "10px 12px",
     fontSize: "0.82rem",
     color: "var(--ink-soft)",
     cursor: "pointer",
-    borderRadius: 6,
-    lineHeight: 1.4,
-    marginBottom: 2,
-    transition: "background 0.12s",
+    borderRadius: "var(--radius-sm)",
+    lineHeight: 1.45,
+    marginBottom: 4,
+    transition: "all var(--transition-fast)",
     fontFamily: "var(--font-sans)",
+    fontWeight: 500,
   },
   docChip: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "5px 10px",
-    fontSize: "0.82rem",
+    padding: "6px 12px",
+    fontSize: "0.8rem",
     color: "var(--ink-muted)",
+    borderRadius: "var(--radius-sm)",
+    transition: "background var(--transition-fast)",
   },
   docDot: {
     width: 6,
     height: 6,
     borderRadius: "50%",
-    background: "var(--green)",
+    background: "var(--success)",
     flexShrink: 0,
   },
   clearBtn: {
     margin: "auto 16px 0",
-    padding: "9px 16px",
-    background: "none",
-    border: "1px solid var(--border-strong)",
-    borderRadius: 8,
+    padding: "10px 16px",
+    background: "transparent",
+    border: "1.5px solid var(--border-strong)",
+    borderRadius: "var(--radius-md)",
     fontSize: "0.82rem",
+    fontWeight: 500,
     color: "var(--ink-muted)",
     cursor: "pointer",
     fontFamily: "var(--font-sans)",
+    transition: "all var(--transition-fast)",
   },
   backdrop: {
     position: "fixed",
     inset: 0,
     zIndex: 40,
-    background: "rgba(0,0,0,0.18)",
+    background: "rgba(0,0,0,0.25)",
+    backdropFilter: "blur(2px)",
+    transition: "opacity var(--transition-base)",
   },
 
   // Main
@@ -505,328 +570,351 @@ const S = {
     height: "100%",
   },
 
-  // Header
+  // Header - Premium
   header: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    padding: "12px 20px",
+    gap: 14,
+    padding: "14px 20px",
     background: "var(--white)",
     borderBottom: "1px solid var(--border)",
     flexShrink: 0,
-    boxShadow: "0 1px 0 var(--border)",
+    boxShadow: "var(--shadow-xs)",
   },
   menuBtn: {
     display: "flex",
     flexDirection: "column",
-    gap: 4,
-    background: "none",
+    gap: 5,
+    background: "transparent",
     border: "none",
     cursor: "pointer",
-    padding: "6px 4px",
-    borderRadius: 6,
+    padding: "8px 6px",
+    borderRadius: "var(--radius-sm)",
     flexShrink: 0,
+    transition: "all var(--transition-fast)",
   },
   menuLine: {
     display: "block",
     width: 20,
-    height: 2,
+    height: 2.5,
     background: "var(--ink-soft)",
-    borderRadius: 1,
+    borderRadius: 1.25,
+    transition: "all var(--transition-fast)",
   },
   headerBrand: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     flex: 1,
   },
   headerLogo: { width: 36, height: 36, objectFit: "contain" },
   headerTitle: {
-    fontFamily: "var(--font-serif)",
-    fontSize: "1.05rem",
-    fontWeight: 600,
+    fontSize: "1.1rem",
+    fontWeight: 700,
     color: "var(--ink)",
     lineHeight: 1.2,
+    letterSpacing: "-0.01em",
   },
   headerSub: {
-    fontSize: "0.72rem",
+    fontSize: "0.7rem",
     color: "var(--ink-faint)",
-    marginTop: 1,
+    marginTop: 2,
+    fontWeight: 500,
   },
   headerStatus: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flexShrink: 0,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: "50%",
-    transition: "background 0.3s",
+    boxShadow: "0 0 0 2px var(--white), 0 0 4px currentColor",
+    transition:
+      "background var(--transition-fast), box-shadow var(--transition-fast)",
   },
   statusText: {
     fontSize: "0.75rem",
     color: "var(--ink-muted)",
     fontFamily: "var(--font-mono)",
+    fontWeight: 500,
   },
 
   // Chat
   chatArea: {
     flex: 1,
     overflowY: "auto",
-    padding: "24px 20px",
+    padding: "28px 24px",
+    background: "var(--cream)",
   },
 
-  // Welcome
+  // Welcome - Premium
   welcome: {
-    maxWidth: 640,
+    maxWidth: 720,
     margin: "0 auto",
-    paddingTop: "5vh",
+    paddingTop: "8vh",
     textAlign: "center",
   },
   welcomeLogoWrap: {
-    width: 72,
-    height: 72,
-    background: "var(--green)",
-    borderRadius: 18,
+    width: 80,
+    height: 80,
+    borderRadius: "var(--radius-xl)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    margin: "0 auto 20px",
-    boxShadow: "0 4px 20px rgba(26,107,60,0.25)",
+    margin: "0 auto 28px",
   },
-  welcomeLogo: { width: 48, height: 48, objectFit: "contain" },
+  welcomeLogo: { width: 52, height: 52, objectFit: "contain" },
   welcomeTitle: {
-    fontFamily: "var(--font-serif)",
-    fontSize: "1.7rem",
-    fontWeight: 600,
+    fontSize: "1.9rem",
+    fontWeight: 700,
     color: "var(--ink)",
-    marginBottom: 10,
+    marginBottom: 14,
+    letterSpacing: "-0.02em",
   },
   welcomeDesc: {
-    fontSize: "0.9rem",
+    fontSize: "0.95rem",
     color: "var(--ink-muted)",
-    lineHeight: 1.7,
-    marginBottom: 32,
+    lineHeight: 1.75,
+    marginBottom: 40,
+    fontWeight: 500,
   },
   suggGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-    gap: 8,
+    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+    gap: 12,
     textAlign: "left",
   },
   suggCard: {
     display: "flex",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
     background: "var(--white)",
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    padding: "11px 14px",
-    fontSize: "0.83rem",
+    border: "1.5px solid var(--border)",
+    borderRadius: "var(--radius-md)",
+    padding: "14px 16px",
+    fontSize: "0.85rem",
     color: "var(--ink-soft)",
     cursor: "pointer",
-    lineHeight: 1.4,
+    lineHeight: 1.5,
     fontFamily: "var(--font-sans)",
-    transition: "border-color 0.15s, box-shadow 0.15s",
+    fontWeight: 500,
+    transition: "all var(--transition-fast)",
     boxShadow: "var(--shadow-sm)",
     textAlign: "left",
   },
   suggArrow: {
     color: "var(--green)",
     flexShrink: 0,
-    fontSize: "0.9rem",
-    marginTop: 1,
+    fontSize: "1rem",
+    marginTop: 0,
+    transition: "transform var(--transition-fast)",
   },
 
-  // Thread
+  // Thread - Premium
   thread: {
-    maxWidth: 760,
+    maxWidth: 800,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    gap: 20,
+    gap: 18,
   },
   userRow: {
     display: "flex",
     alignItems: "flex-start",
-    gap: 10,
+    gap: 12,
     justifyContent: "flex-end",
-    animation: "fadeUp 0.2s ease",
+    animation: "fadeUp var(--transition-base) ease",
   },
   botRow: {
     display: "flex",
     alignItems: "flex-start",
     gap: 12,
-    animation: "fadeUp 0.2s ease",
+    animation: "fadeUp var(--transition-base) ease",
   },
   botAvatar: {
-    width: 34,
-    height: 34,
-    background: "var(--green)",
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    background:
+      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
+    borderRadius: "var(--radius-md)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
     marginTop: 2,
-    boxShadow: "0 2px 8px rgba(26,107,60,0.2)",
+    boxShadow: "var(--shadow-green)",
   },
-  botAvatarImg: { width: 22, height: 22, objectFit: "contain" },
+  botAvatarImg: { width: 20, height: 20, objectFit: "contain" },
   userAvatar: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     background: "var(--ink)",
     color: "var(--white)",
-    borderRadius: 10,
+    borderRadius: "var(--radius-md)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     fontSize: "0.7rem",
-    fontWeight: 600,
+    fontWeight: 700,
     flexShrink: 0,
     marginTop: 2,
     letterSpacing: "0.02em",
   },
   userBubble: {
     maxWidth: "72%",
-    background: "var(--green)",
-    borderRadius: "14px 4px 14px 14px",
-    padding: "11px 15px",
-    boxShadow: "0 2px 8px rgba(26,107,60,0.15)",
+    background:
+      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
+    borderRadius: "16px 4px 16px 16px",
+    padding: "12px 16px",
+    boxShadow: "var(--shadow-green)",
   },
   userText: {
     color: "var(--white)",
-    fontSize: "0.91rem",
+    fontSize: "0.93rem",
     lineHeight: 1.6,
+    fontWeight: 500,
   },
   botBubble: {
     flex: 1,
     maxWidth: "88%",
     background: "var(--white)",
     border: "1px solid var(--border)",
-    borderRadius: "4px 14px 14px 14px",
-    padding: "14px 18px",
+    borderRadius: "6px 16px 16px 16px",
+    padding: "16px 18px",
     boxShadow: "var(--shadow-sm)",
   },
   cursor: {
     display: "inline-block",
-    animation: "blink 1s step-end infinite",
+    animation: "blink 1.2s step-end infinite",
     color: "var(--green)",
-    fontWeight: 300,
-    marginLeft: 1,
+    fontWeight: 400,
+    marginLeft: 2,
   },
 
-  // Sources
+  // Sources - Premium
   sourcesRow: {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
-    paddingLeft: 46,
+    gap: 8,
+    paddingLeft: 48,
+    marginTop: 4,
   },
   sourcesLabel: {
-    fontSize: "0.72rem",
+    fontSize: "0.7rem",
     color: "var(--ink-faint)",
-    fontWeight: 500,
-    letterSpacing: "0.04em",
+    fontWeight: 600,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
   },
   sourceChip: {
     display: "inline-flex",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     background: "var(--green-pale)",
     border: "1px solid var(--green-border)",
     color: "var(--green)",
-    padding: "2px 9px",
-    borderRadius: 20,
+    padding: "4px 11px",
+    borderRadius: "20px",
     fontSize: "0.72rem",
-    fontWeight: 500,
+    fontWeight: 600,
+    transition: "all var(--transition-fast)",
   },
   sourceScore: {
     color: "var(--green-mid)",
-    fontSize: "0.68rem",
+    fontSize: "0.65rem",
+    fontWeight: 700,
   },
 
-  // Error
+  // Error - Premium
   errorBox: {
-    background: "#fff5f5",
-    border: "1px solid #fecaca",
+    background: "linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%)",
+    border: "1.5px solid #fecaca",
+    borderRadius: "var(--radius-md)",
     color: "#dc2626",
-    padding: "10px 14px",
-    borderRadius: 8,
+    padding: "12px 16px",
     fontSize: "0.85rem",
     display: "flex",
-    gap: 8,
+    gap: 10,
     alignItems: "center",
+    boxShadow: "0 2px 4px rgba(220, 38, 38, 0.1)",
   },
-  errorIcon: { fontSize: "1rem" },
+  errorIcon: { fontSize: "1.1rem", flexShrink: 0 },
 
-  // Input
+  // Input - Premium
   inputBar: {
-    padding: "12px 20px 14px",
+    padding: "16px 24px 18px",
     background: "var(--white)",
     borderTop: "1px solid var(--border)",
     flexShrink: 0,
+    boxShadow: "0 -2px 8px rgba(0,0,0,0.03)",
   },
   inputWrap: {
     display: "flex",
-    gap: 10,
+    gap: 12,
     alignItems: "flex-end",
-    maxWidth: 760,
+    maxWidth: 800,
     margin: "0 auto",
     background: "var(--cream)",
-    border: "1.5px solid var(--border-strong)",
-    borderRadius: 14,
-    padding: "6px 8px 6px 16px",
+    border: "1.5px solid var(--border)",
+    borderRadius: "var(--radius-lg)",
+    padding: "10px 12px 10px 18px",
     boxShadow: "var(--shadow-sm)",
-    transition: "border-color 0.15s",
+    transition: "all var(--transition-fast)",
   },
   textarea: {
     flex: 1,
-    background: "none",
+    background: "transparent",
     border: "none",
     outline: "none",
     resize: "none",
     fontFamily: "var(--font-sans)",
-    fontSize: "0.93rem",
+    fontSize: "0.94rem",
     color: "var(--ink)",
     lineHeight: 1.6,
-    padding: "4px 0",
-    minHeight: 28,
-    maxHeight: 140,
+    padding: "6px 0",
+    minHeight: 24,
+    maxHeight: 120,
+    fontWeight: 500,
   },
   sendBtn: {
-    width: 38,
-    height: 38,
-    background: "var(--green)",
+    width: 40,
+    height: 40,
+    background:
+      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
     color: "var(--white)",
     border: "none",
-    borderRadius: 10,
+    borderRadius: "var(--radius-md)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    transition: "opacity 0.15s, transform 0.1s",
-    boxShadow: "0 2px 8px rgba(26,107,60,0.3)",
+    transition: "all var(--transition-fast)",
+    boxShadow: "var(--shadow-green)",
+    cursor: "pointer",
+    fontWeight: 600,
   },
   spinner: {
     display: "block",
-    width: 16,
-    height: 16,
-    border: "2px solid rgba(255,255,255,0.4)",
+    width: 18,
+    height: 18,
+    border: "2.5px solid rgba(255,255,255,0.3)",
     borderTopColor: "white",
     borderRadius: "50%",
-    animation: "spin 0.7s linear infinite",
+    animation: "spin 0.8s linear infinite",
   },
   inputHint: {
     textAlign: "center",
-    fontSize: "0.7rem",
+    fontSize: "0.68rem",
     color: "var(--ink-faint)",
-    marginTop: 6,
-    maxWidth: 760,
+    marginTop: 8,
+    maxWidth: 800,
     marginLeft: "auto",
     marginRight: "auto",
+    fontWeight: 500,
+    letterSpacing: "0.01em",
   },
 };
