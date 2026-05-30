@@ -1,15 +1,33 @@
 @import "tailwindcss";
 
+/* Design System */
 :root {
+  /* Colors */
+  --white: #ffffff;
+  --cream: #fafaf8;
+  --ink: #1a1a1a;
+  --ink-soft: #4a4a48;
+  --ink-muted: #8b8b89;
+  --ink-faint: #c5c5c3;
+  --border: #e8e8e6;
+  --border-strong: #d0d0ce;
+  --green: #1a6b3c;
+  --green-pale: #f0fdf4;
+  --green-mid: #4ade80;
+  --green-border: #86efac;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: "Georgia", serif;
+  --font-mono: "Menlo", monospace;
+
+  /* Legacy */
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,8 +37,153 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Animations */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Prose styling for markdown */
+.prose {
+  font-size: 0.93rem;
+  line-height: 1.6;
+}
+
+.prose h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 12px 0 8px;
+  color: var(--ink);
+}
+
+.prose h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 10px 0 6px;
+  color: var(--ink);
+}
+
+.prose h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--ink);
+}
+
+.prose p {
+  margin: 6px 0;
+}
+
+.prose a {
+  color: var(--green);
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose code {
+  background: var(--cream);
+  color: var(--ink);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+}
+
+.prose pre {
+  background: var(--ink);
+  color: #e0e0e0;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 8px 0;
+}
+
+.prose pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--green);
+  padding-left: 12px;
+  margin-left: 0;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 12px 0;
+}
+
+.prose table th,
+.prose table td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.prose table th {
+  background: var(--cream);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.prose ul, .prose ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.prose li {
+  margin: 4px 0;
 }

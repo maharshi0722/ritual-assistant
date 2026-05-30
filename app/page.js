@@ -1,322 +1,832 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Inter } from "next/font/google";
+import { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "600", "700"] });
-const SCORE_LEVELS = [
-  { min: 0, max: 1, label: "Level – Ritual Newbie" },
-  { min: 2, max: 3, label: "Level – Curious Explorer" },
-  { min: 4, max: 5, label: "Level – Knowledge Seeker" },
-  { min: 6, max: 6, label: "Level – Ritual Initiate" },
-  { min: 7, max: 7, label: "Level – System Understander" },
-  { min: 8, max: 8, label: "Level – Protocol Thinker" },
-  { min: 9, max: 9, label: "Level – Ritual Architect" },
-  { min: 10, max: 10, label: "Level – AI Infrastructure Master" },
+const SUGGESTIONS = [
+  "What are the 7 properties of an autonomous agent?",
+  "What precompile address handles HTTP calls?",
+  "How does an agent achieve immortality on Ritual?",
+  "Explain sync vs async precompiles",
+  "How do I schedule recurring on-chain execution?",
+  "What is DKMS and why do agents need it?",
+  "How does FHE inference work?",
+  "How do I set up my wallet for Ritual Chain?",
+  "What's the difference between SPC and two-phase async?",
+  "How do I pass API keys securely using ECIES?",
+  "What system contracts do I need to know about?",
+  "How do passkeys work on Ritual?",
+  "What is the Scheduler and how do I use it?",
+  "Explain computational sovereignty",
+  "How do I call the LLM precompile from Solidity?",
 ];
 
-const getScoreMeaning = (score) => {
-  return SCORE_LEVELS.find(
-    (level) => score >= level.min && score <= level.max
-  )?.label;
-};
-const ritualMCQQuestions = [
-  {
-    question: "What problem does Ritual aim to solve?",
-    options: [
-      "High GPU costs",
-      "Flawed centralized AI infrastructure",
-      "Gaming latency issues",
-      "Low NFT adoption",
-    ],
-    answer: "Flawed centralized AI infrastructure",
-  },
-  {
-    question: "Ritual is best described as?",
-    options: [
-      "A centralized AI company",
-      "A decentralized open AI infrastructure network",
-      "A GPU provider",
-      "A cloud storage platform",
-    ],
-    answer: "A decentralized open AI infrastructure network",
-  },
-  {
-    question: "Which value is part of Ritual’s core philosophy?",
-    options: [
-      "Closed-source governance",
-      "Censorship resistance",
-      "AI monetization only",
-      "High transaction fees",
-    ],
-    answer: "Censorship resistance",
-  },
-  {
-    question: "What does the Ritual SDK help developers with?",
-    options: [
-      "NFT minting",
-      "Easy decentralized AI integration",
-      "Video rendering",
-      "Game development",
-    ],
-    answer: "Easy decentralized AI integration",
-  },
-  {
-    question: "What is EVM++ in the Ritual ecosystem?",
-    options: [
-      "A new smart contract language",
-      "Enhanced EVM with native heterogeneous compute",
-      "A crypto wallet",
-      "A staking protocol",
-    ],
-    answer: "Enhanced EVM with native heterogeneous compute",
-  },
-  {
-    question: "What is Infernet?",
-    options: [
-      "A centralized AI tool",
-      "A decentralized oracle for heterogeneous compute",
-      "A DeFi protocol",
-      "A blockchain explorer",
-    ],
-    answer: "A decentralized oracle for heterogeneous compute",
-  },
-  {
-    question: "What feature ensures AI results on Ritual are trustworthy?",
-    options: [
-      "Random sampling",
-      "Fully verifiable computation",
-      "Faster internet",
-      "Private servers",
-    ],
-    answer: "Fully verifiable computation",
-  },
-  {
-    question: "What is the role of Resonance?",
-    options: [
-      "Consensus algorithm",
-      "Fee market for heterogeneous compute",
-      "Security layer",
-      "NFT trading system",
-    ],
-    answer: "Fee market for heterogeneous compute",
-  },
-  {
-    question: "Who is a co-founder of Ritual?",
-    options: [
-      "Arthur Hayes",
-      "Niraj Pant",
-      "Illia Polosukhin",
-      "Sreeram Kannan",
-    ],
-    answer: "Niraj Pant",
-  },
-  {
-    question: "What is Shrine in Ritual?",
-    options: [
-      "A religious DAO",
-      "An AI NFT platform",
-      "An incubator for AI + crypto builders",
-      "A blockchain explorer",
-    ],
-    answer: "An incubator for AI + crypto builders",
-  },
-];
+let _docIndex = null;
 
-export default function Page() {
-  const [started, setStarted] = useState(false);
-  const [finished, setFinished] = useState(false);
-  const [score, setScore] = useState(0);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedOption, setSelectedOption] = useState("");
-  const [questions, setQuestions] = useState([]);
-  const [quizKey, setQuizKey] = useState(0);
-  const [disableOptions, setDisableOptions] = useState(false);
- const scoreMeaning = getScoreMeaning(score); 
-  const shuffleArray = (array) =>
-    array
-      .map((value) => ({ value, sort: Math.random() }))
-      .sort((a, b) => a.sort - b.sort)
-      .map(({ value }) => value);
+async function getDocIndex() {
+  if (_docIndex) return _docIndex;
+  const { buildIndex, chunkMarkdown } = await import("../lib/search.js");
+  const sources = [
+    "vision",
+    "agents",
+    "precompiles",
+    "scheduler",
+    "real-world",
+    "enshrined-ai",
+    "authentication",
+    "system-contracts",
+    "quick-start",
+    "glossary",
+  ];
+  const chunks = [];
+  for (const src of sources) {
+    try {
+      const res = await fetch(`/data/${src}.md`);
+      if (res.ok) {
+        const text = await res.text();
+        chunks.push(...chunkMarkdown(text, src));
+      }
+    } catch {}
+  }
+  _docIndex = buildIndex(chunks);
+  return _docIndex;
+}
+
+export default function ChatApp() {
+  const [messages, setMessages] = useState([]);
+  const [sources, setSources] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const bottomRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
-    const shuffledQuestions = shuffleArray(ritualMCQQuestions).map((q) => ({
-      ...q,
-      options: shuffleArray(q.options),
-    }));
-    setQuestions(shuffledQuestions);
-  }, [quizKey]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  const handleSelect = (option) => {
-    if (disableOptions) return;
-    setSelectedOption(option);
-    setDisableOptions(true);
+  // Auto-resize textarea
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
+  }, [input]);
 
-    if (option === questions[currentIndex].answer) {
-      setScore((prev) => prev + 1);
-    }
+  const send = useCallback(
+    async (question) => {
+      if (!question.trim() || loading) return;
+      setError(null);
+      setSources([]);
 
-    setTimeout(() => {
-      setSelectedOption("");
-      setDisableOptions(false);
-      if (currentIndex + 1 < questions.length) {
-        setCurrentIndex((prev) => prev + 1);
-      } else {
-        setFinished(true);
+      // 1. RAG search
+      const index = await getDocIndex();
+      const { searchChunks } = await import("../lib/search.js");
+      const hits = searchChunks(index, question, 4);
+      setSources(hits);
+
+      const context = hits.length
+        ? hits
+            .map((h) => `[${h.source} §${h.index}]\n${h.text}`)
+            .join("\n\n---\n\n")
+        : "No relevant context found.";
+
+      // 2. Build messages for API
+      const userContent = `RITUAL DOCS CONTEXT:\n\n${context}\n\n---\n\nQUESTION: ${question}`;
+      const history = messages.slice(-6);
+      const apiMessages = [...history, { role: "user", content: userContent }];
+
+      // 3. Update UI
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: question },
+        { role: "assistant", content: "" },
+      ]);
+      setLoading(true);
+
+      // 4. Stream
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: apiMessages }),
+        });
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(data);
+              const token = parsed.choices?.[0]?.delta?.content;
+              if (token) {
+                setMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = {
+                    role: "assistant",
+                    content: next[next.length - 1].content + token,
+                  };
+                  return next;
+                });
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        setError(err.message);
+        setMessages((prev) => prev.slice(0, -1));
+      } finally {
+        setLoading(false);
       }
-    }, 600);
+    },
+    [messages, loading],
+  );
+
+  const handleSubmit = () => {
+    const q = input.trim();
+    if (!q) return;
+    setInput("");
+    send(q);
   };
 
-  const handleRestart = () => {
-    setScore(0);
-    setCurrentIndex(0);
-    setFinished(false);
-    setQuizKey((prev) => prev + 1);
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
-    <div
-      className={`min-h-screen flex flex-col justify-between ${inter.className}
-      bg-gradient-to-br from-[#f8fafc] to-[#eef2ff] text-[#1e293b]`}
-    >
-      {/* Header */}
-      <header className="
-  sticky top-6 mx-auto w-[92%] max-w-lg 
-  bg-white/90 backdrop-blur-md 
-  border border-[#e2e8f0] 
-  rounded-2xl py-3 px-4 
-  shadow-sm z-20
-">
-  <div className="flex items-center justify-center gap-3">
-    
-    {/* Ritual Logo */}
-    <svg
-      width="32"
-      height="32"
-      viewBox="0 0 33 33"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M13.1047 26.7745L14.6029 25.2665L15.3981 26.0669L12.75 28.7322L8.20482 24.1574L14.6029 17.7176L15.3981 18.518L10.1453 23.805L9.79515 24.1574L10.1453 24.5098L12.3953 26.7745L12.75 27.1315L13.1047 26.7745ZM13.8519 22.2925L14.647 21.4922L19.8952 26.7746L20.2499 27.1316L20.6046 26.7746L22.8546 24.51L23.2047 24.1576L22.8546 23.8052L21.3518 22.2926L22.147 21.4921L24.7952 24.1575L20.25 28.7322L13.8519 22.2925ZM20.2506 4.48439L24.7958 9.05914L18.3977 15.4989L17.6025 14.6986L22.8553 9.41158L23.2055 9.05917L22.8553 8.70677L20.6053 6.44212L20.2506 6.08512L19.8959 6.44212L18.3977 7.95012L17.6025 7.14979L20.2506 4.48439ZM22.1471 13.9433L27.3953 19.2257L27.75 19.5827L28.1047 19.2257L30.3547 16.9611L30.7049 16.6087L30.3547 16.2563L28.1047 13.9916L27.75 13.6346L27.3953 13.9916L25.8971 15.4996L25.1019 14.6993L27.75 12.0339L32.2952 16.6087L27.75 21.1834L21.3519 14.7437L22.1471 13.9433ZM5.60467 19.2257L7.10291 17.7177L7.89812 18.518L5.25 21.1834L0.704823 16.6086L5.24994 12.0339L11.6481 18.4736L10.8529 19.274L5.60467 13.9916L5.24997 13.6346L4.89527 13.9916L2.64527 16.2562L2.29515 16.6086L2.64527 16.961L4.89527 19.2257L5.24997 19.5827L5.60467 19.2257ZM12.75 4.48505L19.1481 10.9248L18.3529 11.7252L13.1047 6.44279L12.75 6.08578L12.3953 6.44279L10.1453 8.70743L9.79515 9.05984L10.1453 9.41224L11.6481 10.9248L10.8529 11.7252L8.20482 9.05981L12.75 4.48505ZM15.3981 10.9692L10.897 15.4996L10.1019 14.6993L14.6029 10.1689L15.3981 10.9692ZM18.353 19.274L13.8519 14.7436L14.647 13.9433L19.1481 18.4737L18.353 19.274ZM17.6018 22.248L22.1029 17.7177L22.8981 18.5181L18.397 23.0484L17.6018 22.248ZM16.5295 4.7672L14.5137 2.73831L16.5295 0.709411L18.5453 2.73831L16.5295 4.7672ZM16.5295 32.2906L14.5138 30.2617L16.5295 28.2328L18.5453 30.2617L16.5295 32.2906Z"
-        fill="#312e81"
-        stroke="#312e81"
-      />
-    </svg>
-
-    {/* Title */}
-    <div>
-      <h1 className="text-xl font-bold text-[#312e81]">
-        Ritual Knowledge Quiz
-      </h1>
-      <p className="text-[11px] text-[#64748b]">
-        Decentralized AI Infrastructure
-      </p>
-    </div>
-  </div>
-</header>
-
-
-      {/* Main */}
-      <main className="flex-1 flex items-center justify-center px-4 mt-24 mb-20">
-        {!started ? (
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-lg border border-[#e2e8f0] text-center">
-            <h2 className="text-xl font-semibold text-[#1e293b] mb-2">
-              Welcome to the Ritual Quiz
-            </h2>
-            <p className="text-[#64748b] text-sm mb-6">
-              Test your understanding of decentralized AI built on Ritual.
-            </p>
-
+    <div style={S.shell}>
+      {/* ── Sidebar ── */}
+      <aside
+        style={{
+          ...S.sidebar,
+          transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
+        }}
+      >
+        <div style={S.sidebarHeader}>
+          <img src="/ritual-logo.png" alt="Ritual" style={S.sidebarLogo} />
+          <span style={S.sidebarTitle}>Ritual Assistant</span>
+        </div>
+        <div style={S.sidebarSection}>
+          <p style={S.sidebarLabel}>QUICK QUESTIONS</p>
+          {SUGGESTIONS.map((s) => (
             <button
-              onClick={() => setStarted(true)}
-              className="px-6 py-2 rounded-full bg-[#4f46e5] text-white hover:opacity-90 transition font-medium"
+              key={s}
+              style={S.sidebarBtn}
+              onClick={() => {
+                send(s);
+                setSidebarOpen(false);
+              }}
             >
-              Start Quiz
+              {s}
             </button>
-          </div>
-        ) : !finished ? (
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-lg border border-[#e2e8f0]">
-            {/* Progress */}
-            <div className="w-full bg-[#e2e8f0] rounded-full h-2 mb-6">
-              <div
-                className="bg-[#4f46e5] h-2 rounded-full transition-all duration-700"
-                style={{
-                  width: `${((currentIndex + 1) / questions.length) * 100}%`,
-                }}
-              />
+          ))}
+        </div>
+        <div style={S.sidebarSection}>
+          <p style={S.sidebarLabel}>DOCS COVERAGE</p>
+          {[
+            "Vision & Chain",
+            "Autonomous Agents",
+            "Precompiles",
+            "Scheduler",
+          ].map((d) => (
+            <div key={d} style={S.docChip}>
+              <span style={S.docDot} />
+              {d}
             </div>
-
-            <h2 className="text-sm text-[#64748b] text-center mb-2">
-              Question {currentIndex + 1} of {questions.length}
-            </h2>
-
-            <p className="text-center text-[#1e293b] mb-6 font-medium">
-              {questions[currentIndex]?.question}
-            </p>
-
-            <div className="space-y-3">
-              {questions[currentIndex]?.options.map((option, idx) => {
-                let style = "bg-[#f8fafc] text-[#1e293b] border-[#e2e8f0]";
-
-                if (selectedOption) {
-                  if (option === questions[currentIndex].answer) {
-                    style = "bg-green-500 text-white border-green-500";
-                  } else if (
-                    option === selectedOption &&
-                    option !== questions[currentIndex].answer
-                  ) {
-                    style = "bg-red-400 text-white border-red-400";
-                  }
-                }
-
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelect(option)}
-                    disabled={disableOptions}
-                    className={`w-full text-left px-4 py-3 rounded-xl border transition-all duration-300 hover:scale-[1.02] ${style}`}
-                  >
-                    {option}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-         <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-lg border text-center">
-            <h2 className="text-xl font-bold mb-2">Quiz Completed</h2>
-
-            <p className="mb-1">
-              Your Score:{" "}
-              <span className="font-bold text-[#4f46e5]">
-                {score}/{questions.length}
-              </span>
-            </p>
-
-            {/* ✅ Score Meaning Added */}
-            <p className="text-sm font-semibold text-[#312e81] mt-2">
-              {scoreMeaning}
-            </p>
-
-            <p className="text-xs text-[#64748b] mb-6 mt-1">
-              The future of open AI is decentralized.
-            </p>
-
-            <button
-              onClick={handleRestart}
-              className="px-6 py-2 rounded-full bg-[#4f46e5] text-white"
-            >
-              Restart Quiz
-            </button>
-          </div>
+          ))}
+        </div>
+        {messages.length > 0 && (
+          <button
+            style={S.clearBtn}
+            onClick={() => {
+              setMessages([]);
+              setSources([]);
+              setSidebarOpen(false);
+            }}
+          >
+            Clear conversation
+          </button>
         )}
-      </main>
+      </aside>
 
+      {/* Sidebar backdrop */}
+      {sidebarOpen && (
+        <div style={S.backdrop} onClick={() => setSidebarOpen(false)} />
+      )}
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 w-full py-3 text-center text-xs text-[#64748b] bg-white border-t border-[#e2e8f0]">
-        © {new Date().getFullYear()} Ritual Quiz -  Built by Maharshi
-      </footer>
+      {/* ── Main ── */}
+      <div style={S.main}>
+        {/* Header */}
+        <header style={S.header}>
+          <button
+            style={S.menuBtn}
+            onClick={() => setSidebarOpen((o) => !o)}
+            aria-label="Menu"
+          >
+            <span style={S.menuLine} />
+            <span style={S.menuLine} />
+            <span style={S.menuLine} />
+          </button>
+          <div style={S.headerBrand}>
+            <img src="/ritual-logo.png" alt="Ritual" style={S.headerLogo} />
+            <div>
+              <div style={S.headerTitle}>Ritual Assistant</div>
+              <div style={S.headerSub}>Powered by Ritual Chain docs</div>
+            </div>
+          </div>
+          <div style={S.headerStatus}>
+            <span
+              style={{
+                ...S.statusDot,
+                background: loading ? "#f59e0b" : "#22c55e",
+              }}
+            />
+            <span style={S.statusText}>{loading ? "Thinking" : "Ready"}</span>
+          </div>
+        </header>
+
+        {/* Chat area */}
+        <div style={S.chatArea}>
+          {messages.length === 0 ? (
+            <div style={S.welcome}>
+              <div style={S.welcomeLogoWrap}>
+                <img
+                  src="/ritual-logo.png"
+                  alt="Ritual"
+                  style={S.welcomeLogo}
+                />
+              </div>
+              <h1 style={S.welcomeTitle}>Ritual Assistant</h1>
+              <p style={S.welcomeDesc}>
+                Ask anything about Ritual Chain — precompiles, autonomous
+                agents,
+                <br />
+                the Scheduler, TEEs, FHE, DKMS, and more.
+              </p>
+              <div style={S.suggGrid}>
+                {SUGGESTIONS.map((s) => (
+                  <button key={s} style={S.suggCard} onClick={() => send(s)}>
+                    <span style={S.suggArrow}>→</span>
+                    <span>{s}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={S.thread}>
+              {messages.map((m, i) => (
+                <div
+                  key={i}
+                  style={m.role === "user" ? S.userRow : S.botRow}
+                  className="msg-enter"
+                >
+                  {m.role === "assistant" && (
+                    <div style={S.botAvatar}>
+                      <img
+                        src="/ritual-logo.png"
+                        alt="Ritual"
+                        style={S.botAvatarImg}
+                      />
+                    </div>
+                  )}
+                  <div style={m.role === "user" ? S.userBubble : S.botBubble}>
+                    {m.role === "user" ? (
+                      <p style={S.userText}>{m.content}</p>
+                    ) : (
+                      <div className="prose" style={{ fontSize: "0.93rem" }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {m.content ||
+                            (loading && i === messages.length - 1 ? "​" : "")}
+                        </ReactMarkdown>
+                        {loading && i === messages.length - 1 && (
+                          <span style={S.cursor}>|</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {m.role === "user" && <div style={S.userAvatar}>You</div>}
+                </div>
+              ))}
+
+              {/* Sources */}
+              {sources.length > 0 && !loading && (
+                <div style={S.sourcesRow}>
+                  <span style={S.sourcesLabel}>Sources</span>
+                  {sources.map((src, i) => (
+                    <span key={i} style={S.sourceChip}>
+                      {src.source}
+                      <span style={S.sourceScore}>§{src.index}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {error && (
+                <div style={S.errorBox}>
+                  <span style={S.errorIcon}>⚠</span> {error}
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+          )}
+        </div>
+
+        {/* Input bar */}
+        <div style={S.inputBar}>
+          <div style={S.inputWrap}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Ask about Ritual Chain..."
+              style={S.textarea}
+              rows={1}
+              disabled={loading}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() || loading}
+              style={{
+                ...S.sendBtn,
+                opacity: !input.trim() || loading ? 0.4 : 1,
+                cursor: !input.trim() || loading ? "not-allowed" : "pointer",
+              }}
+            >
+              {loading ? (
+                <span style={S.spinner} />
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              )}
+            </button>
+          </div>
+          <p style={S.inputHint}>
+            Press Enter to send · Shift+Enter for new line
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
+
+// ── Styles ────────────────────────────────────────────────────
+
+const S = {
+  shell: {
+    display: "flex",
+    height: "100dvh",
+    background: "var(--cream)",
+    overflow: "hidden",
+    position: "relative",
+  },
+
+  // Sidebar
+  sidebar: {
+    position: "fixed",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 280,
+    background: "var(--white)",
+    borderRight: "1px solid var(--border)",
+    zIndex: 50,
+    transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)",
+    display: "flex",
+    flexDirection: "column",
+    padding: "0 0 20px",
+    boxShadow: "var(--shadow-md)",
+    overflowY: "auto",
+  },
+  sidebarHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "20px 20px 16px",
+    borderBottom: "1px solid var(--border)",
+    marginBottom: 8,
+  },
+  sidebarLogo: { width: 32, height: 32, objectFit: "contain" },
+  sidebarTitle: {
+    fontFamily: "var(--font-serif)",
+    fontSize: "1rem",
+    fontWeight: 600,
+    color: "var(--ink)",
+  },
+  sidebarSection: { padding: "12px 16px" },
+  sidebarLabel: {
+    fontSize: "0.68rem",
+    fontWeight: 600,
+    letterSpacing: "0.08em",
+    color: "var(--ink-faint)",
+    marginBottom: 8,
+  },
+  sidebarBtn: {
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    background: "none",
+    border: "none",
+    padding: "8px 10px",
+    fontSize: "0.82rem",
+    color: "var(--ink-soft)",
+    cursor: "pointer",
+    borderRadius: 6,
+    lineHeight: 1.4,
+    marginBottom: 2,
+    transition: "background 0.12s",
+    fontFamily: "var(--font-sans)",
+  },
+  docChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "5px 10px",
+    fontSize: "0.82rem",
+    color: "var(--ink-muted)",
+  },
+  docDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: "var(--green)",
+    flexShrink: 0,
+  },
+  clearBtn: {
+    margin: "auto 16px 0",
+    padding: "9px 16px",
+    background: "none",
+    border: "1px solid var(--border-strong)",
+    borderRadius: 8,
+    fontSize: "0.82rem",
+    color: "var(--ink-muted)",
+    cursor: "pointer",
+    fontFamily: "var(--font-sans)",
+  },
+  backdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 40,
+    background: "rgba(0,0,0,0.18)",
+  },
+
+  // Main
+  main: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    height: "100%",
+  },
+
+  // Header
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "12px 20px",
+    background: "var(--white)",
+    borderBottom: "1px solid var(--border)",
+    flexShrink: 0,
+    boxShadow: "0 1px 0 var(--border)",
+  },
+  menuBtn: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "6px 4px",
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  menuLine: {
+    display: "block",
+    width: 20,
+    height: 2,
+    background: "var(--ink-soft)",
+    borderRadius: 1,
+  },
+  headerBrand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  headerLogo: { width: 36, height: 36, objectFit: "contain" },
+  headerTitle: {
+    fontFamily: "var(--font-serif)",
+    fontSize: "1.05rem",
+    fontWeight: 600,
+    color: "var(--ink)",
+    lineHeight: 1.2,
+  },
+  headerSub: {
+    fontSize: "0.72rem",
+    color: "var(--ink-faint)",
+    marginTop: 1,
+  },
+  headerStatus: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    transition: "background 0.3s",
+  },
+  statusText: {
+    fontSize: "0.75rem",
+    color: "var(--ink-muted)",
+    fontFamily: "var(--font-mono)",
+  },
+
+  // Chat
+  chatArea: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "24px 20px",
+  },
+
+  // Welcome
+  welcome: {
+    maxWidth: 640,
+    margin: "0 auto",
+    paddingTop: "5vh",
+    textAlign: "center",
+  },
+  welcomeLogoWrap: {
+    width: 72,
+    height: 72,
+    background: "var(--green)",
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: "0 auto 20px",
+    boxShadow: "0 4px 20px rgba(26,107,60,0.25)",
+  },
+  welcomeLogo: { width: 48, height: 48, objectFit: "contain" },
+  welcomeTitle: {
+    fontFamily: "var(--font-serif)",
+    fontSize: "1.7rem",
+    fontWeight: 600,
+    color: "var(--ink)",
+    marginBottom: 10,
+  },
+  welcomeDesc: {
+    fontSize: "0.9rem",
+    color: "var(--ink-muted)",
+    lineHeight: 1.7,
+    marginBottom: 32,
+  },
+  suggGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+    gap: 8,
+    textAlign: "left",
+  },
+  suggCard: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    background: "var(--white)",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    padding: "11px 14px",
+    fontSize: "0.83rem",
+    color: "var(--ink-soft)",
+    cursor: "pointer",
+    lineHeight: 1.4,
+    fontFamily: "var(--font-sans)",
+    transition: "border-color 0.15s, box-shadow 0.15s",
+    boxShadow: "var(--shadow-sm)",
+    textAlign: "left",
+  },
+  suggArrow: {
+    color: "var(--green)",
+    flexShrink: 0,
+    fontSize: "0.9rem",
+    marginTop: 1,
+  },
+
+  // Thread
+  thread: {
+    maxWidth: 760,
+    margin: "0 auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
+  userRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    justifyContent: "flex-end",
+    animation: "fadeUp 0.2s ease",
+  },
+  botRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    animation: "fadeUp 0.2s ease",
+  },
+  botAvatar: {
+    width: 34,
+    height: 34,
+    background: "var(--green)",
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 2,
+    boxShadow: "0 2px 8px rgba(26,107,60,0.2)",
+  },
+  botAvatarImg: { width: 22, height: 22, objectFit: "contain" },
+  userAvatar: {
+    width: 34,
+    height: 34,
+    background: "var(--ink)",
+    color: "var(--white)",
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "0.7rem",
+    fontWeight: 600,
+    flexShrink: 0,
+    marginTop: 2,
+    letterSpacing: "0.02em",
+  },
+  userBubble: {
+    maxWidth: "72%",
+    background: "var(--green)",
+    borderRadius: "14px 4px 14px 14px",
+    padding: "11px 15px",
+    boxShadow: "0 2px 8px rgba(26,107,60,0.15)",
+  },
+  userText: {
+    color: "var(--white)",
+    fontSize: "0.91rem",
+    lineHeight: 1.6,
+  },
+  botBubble: {
+    flex: 1,
+    maxWidth: "88%",
+    background: "var(--white)",
+    border: "1px solid var(--border)",
+    borderRadius: "4px 14px 14px 14px",
+    padding: "14px 18px",
+    boxShadow: "var(--shadow-sm)",
+  },
+  cursor: {
+    display: "inline-block",
+    animation: "blink 1s step-end infinite",
+    color: "var(--green)",
+    fontWeight: 300,
+    marginLeft: 1,
+  },
+
+  // Sources
+  sourcesRow: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingLeft: 46,
+  },
+  sourcesLabel: {
+    fontSize: "0.72rem",
+    color: "var(--ink-faint)",
+    fontWeight: 500,
+    letterSpacing: "0.04em",
+  },
+  sourceChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    background: "var(--green-pale)",
+    border: "1px solid var(--green-border)",
+    color: "var(--green)",
+    padding: "2px 9px",
+    borderRadius: 20,
+    fontSize: "0.72rem",
+    fontWeight: 500,
+  },
+  sourceScore: {
+    color: "var(--green-mid)",
+    fontSize: "0.68rem",
+  },
+
+  // Error
+  errorBox: {
+    background: "#fff5f5",
+    border: "1px solid #fecaca",
+    color: "#dc2626",
+    padding: "10px 14px",
+    borderRadius: 8,
+    fontSize: "0.85rem",
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  errorIcon: { fontSize: "1rem" },
+
+  // Input
+  inputBar: {
+    padding: "12px 20px 14px",
+    background: "var(--white)",
+    borderTop: "1px solid var(--border)",
+    flexShrink: 0,
+  },
+  inputWrap: {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-end",
+    maxWidth: 760,
+    margin: "0 auto",
+    background: "var(--cream)",
+    border: "1.5px solid var(--border-strong)",
+    borderRadius: 14,
+    padding: "6px 8px 6px 16px",
+    boxShadow: "var(--shadow-sm)",
+    transition: "border-color 0.15s",
+  },
+  textarea: {
+    flex: 1,
+    background: "none",
+    border: "none",
+    outline: "none",
+    resize: "none",
+    fontFamily: "var(--font-sans)",
+    fontSize: "0.93rem",
+    color: "var(--ink)",
+    lineHeight: 1.6,
+    padding: "4px 0",
+    minHeight: 28,
+    maxHeight: 140,
+  },
+  sendBtn: {
+    width: 38,
+    height: 38,
+    background: "var(--green)",
+    color: "var(--white)",
+    border: "none",
+    borderRadius: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    transition: "opacity 0.15s, transform 0.1s",
+    boxShadow: "0 2px 8px rgba(26,107,60,0.3)",
+  },
+  spinner: {
+    display: "block",
+    width: 16,
+    height: 16,
+    border: "2px solid rgba(255,255,255,0.4)",
+    borderTopColor: "white",
+    borderRadius: "50%",
+    animation: "spin 0.7s linear infinite",
+  },
+  inputHint: {
+    textAlign: "center",
+    fontSize: "0.7rem",
+    color: "var(--ink-faint)",
+    marginTop: 6,
+    maxWidth: 760,
+    marginLeft: "auto",
+    marginRight: "auto",
+  },
+};
