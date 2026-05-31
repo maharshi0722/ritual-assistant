@@ -30,6 +30,7 @@ async function getDocIndex() {
     "use-cases",
     "team",
     "research",
+    "ritual-dapp-skills",
   ];
   const chunks = [];
   for (const src of sources) {
@@ -54,6 +55,7 @@ export default function ChatApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+  const sendInFlight = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -68,7 +70,8 @@ export default function ChatApp() {
 
   const send = useCallback(
     async (question) => {
-      if (!question.trim() || loading) return;
+      if (!question.trim() || loading || sendInFlight.current) return;
+      sendInFlight.current = true;
       setError(null);
       setSources([]);
       const index = await getDocIndex();
@@ -152,6 +155,7 @@ export default function ChatApp() {
         setMessages((prev) => prev.slice(0, -1));
       } finally {
         setLoading(false);
+        sendInFlight.current = false;
       }
     },
     [messages, loading],
@@ -357,7 +361,7 @@ export default function ChatApp() {
                 </h1>
                 <p style={S.heroDesc}>Ask anything about Ritual Chain</p>
 
-                <div style={S.cardGrid}>
+                <div style={S.cardGrid} className="cardGrid">
                   {SUGGESTIONS.map((s, i) => (
                     <button
                       key={s}
@@ -509,17 +513,6 @@ export default function ChatApp() {
                   )}
                 </button>
               </div>
-              <div style={S.inputFooter}>
-                <span style={S.inputHintText}>
-                  ↵ send &nbsp;·&nbsp; ⇧↵ newline
-                </span>
-                {messages.length > 0 && (
-                  <span style={S.exchangeCount}>
-                    {Math.floor(messages.length / 2)} exchange
-                    {messages.length > 2 ? "s" : ""}
-                  </span>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -640,10 +633,22 @@ const CSS = `
   }
   .prose td { padding:7px 12px; border:1px solid var(--border); color:var(--ink2); vertical-align:top; }
   .prose tr:nth-child(even) td { background: rgba(0,0,0,0.016); }
+  .prose img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1em auto;
+    border-radius: 14px;
+    object-fit: contain;
+  }
+  .prose img:not([src]) { max-width: 100%; }
 
   /* Responsive */
   @media (max-width: 640px) {
     .prose { font-size: 0.87rem; }
+  }
+  @media (max-width: 720px) {
+    .cardGrid { grid-template-columns: 1fr !important; max-width: 520px; }
   }
 `;
 
@@ -829,14 +834,17 @@ const S = {
     gap: 12,
     padding: "0 20px",
     height: 60,
+    width: "100%",
     background: "rgba(255,255,255,0.10)",
     backdropFilter: "blur(18px)",
     borderBottom: "1px solid rgba(255,255,255,0.16)",
     flexShrink: 0,
     boxShadow: "0 1px 0 rgba(255,255,255,0.08)",
-    position: "sticky",
+    position: "fixed",
     top: 0,
-    zIndex: 20,
+    left: 0,
+    right: 0,
+    zIndex: 40,
   },
   menuBtn: {
     display: "flex",
@@ -924,7 +932,7 @@ const S = {
   chatArea: {
     flex: 1,
     overflowY: "auto",
-    padding: "24px 20px 20px",
+    padding: "100px 20px 120px",
     background: "transparent",
   },
 
@@ -985,10 +993,10 @@ const S = {
     margin: "0 auto 32px",
   },
   cardGrid: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    maxWidth: 520,
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 12,
+    maxWidth: 760,
     margin: "0 auto",
   },
   suggCard: {
@@ -1008,6 +1016,7 @@ const S = {
     fontWeight: 700,
     boxShadow: "0 24px 70px rgba(0,0,0,0.08)",
     textAlign: "left",
+    minWidth: 0,
   },
   cardNum: {
     fontSize: "0.68rem",
@@ -1128,14 +1137,16 @@ const S = {
 
   // ── Input bar
   inputBar: {
-    position: "sticky",
+    position: "fixed",
+    left: 0,
+    right: 0,
     bottom: 0,
     padding: "0 0 16px",
     background: "rgba(255,255,255,0.12)",
     backdropFilter: "blur(20px)",
     borderTop: "1px solid rgba(255,255,255,0.18)",
     flexShrink: 0,
-    zIndex: 10,
+    zIndex: 30,
   },
   inputGlow: {
     height: 2,
@@ -1171,7 +1182,7 @@ const S = {
     resize: "none",
     fontFamily: "var(--fs)",
     fontSize: "1.06rem",
-    color: "var(--white)",
+    color: "black",
     lineHeight: 1.8,
     padding: "8px 0",
     minHeight: 32,
