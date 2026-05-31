@@ -5,21 +5,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const SUGGESTIONS = [
+  "What is Ritual Chain?",
   "What are the 7 properties of an autonomous agent?",
-  "What precompile address handles HTTP calls?",
   "How does an agent achieve immortality on Ritual?",
-  "Explain sync vs async precompiles",
   "How do I schedule recurring on-chain execution?",
-  "What is DKMS and why do agents need it?",
-  "How does FHE inference work?",
-  "How do I set up my wallet for Ritual Chain?",
-  "What's the difference between SPC and two-phase async?",
-  "How do I pass API keys securely using ECIES?",
-  "What system contracts do I need to know about?",
-  "How do passkeys work on Ritual?",
-  "What is the Scheduler and how do I use it?",
-  "Explain computational sovereignty",
-  "How do I call the LLM precompile from Solidity?",
 ];
 
 let _docIndex = null;
@@ -28,25 +17,15 @@ async function getDocIndex() {
   if (_docIndex) return _docIndex;
   const { buildIndex, chunkMarkdown } = await import("../lib/search.js");
   const sources = [
-    "vision",
-    "agents",
-    "precompiles",
-    "scheduler",
-    "real-world",
-    "enshrined-ai",
-    "authentication",
-    "system-contracts",
-    "quick-start",
-    "glossary",
+    "vision","agents","precompiles","scheduler",
+    "real-world","enshrined-ai","authentication",
+    "system-contracts","quick-start","glossary","use-cases",
   ];
   const chunks = [];
   for (const src of sources) {
     try {
       const res = await fetch(`/data/${src}.md`);
-      if (res.ok) {
-        const text = await res.text();
-        chunks.push(...chunkMarkdown(text, src));
-      }
+      if (res.ok) { const text = await res.text(); chunks.push(...chunkMarkdown(text, src)); }
     } catch {}
   }
   _docIndex = buildIndex(chunks);
@@ -63,11 +42,8 @@ export default function ChatApp() {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Auto-resize textarea
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -75,846 +51,668 @@ export default function ChatApp() {
     ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
   }, [input]);
 
-  const send = useCallback(
-    async (question) => {
-      if (!question.trim() || loading) return;
-      setError(null);
-      setSources([]);
-
-      // 1. RAG search
-      const index = await getDocIndex();
-      const { searchChunks } = await import("../lib/search.js");
-      const hits = searchChunks(index, question, 4);
-      setSources(hits);
-
-      const context = hits.length
-        ? hits
-            .map((h) => `[${h.source} §${h.index}]\n${h.text}`)
-            .join("\n\n---\n\n")
-        : "No relevant context found.";
-
-      // 2. Build messages for API
-      const userContent = `RITUAL DOCS CONTEXT:\n\n${context}\n\n---\n\nQUESTION: ${question}`;
-      const history = messages.slice(-6);
-      const apiMessages = [...history, { role: "user", content: userContent }];
-
-      // 3. Update UI
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: question },
-        { role: "assistant", content: "" },
-      ]);
-      setLoading(true);
-
-      // 4. Stream
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: apiMessages }),
-        });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop();
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              const token = parsed.choices?.[0]?.delta?.content;
-              if (token) {
-                setMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = {
-                    role: "assistant",
-                    content: next[next.length - 1].content + token,
-                  };
-                  return next;
-                });
-              }
-            } catch {}
-          }
+  const send = useCallback(async (question) => {
+    if (!question.trim() || loading) return;
+    setError(null); setSources([]);
+    const index = await getDocIndex();
+    const { searchChunks } = await import("../lib/search.js");
+    const hits = searchChunks(index, question, 4);
+    setSources(hits);
+    const context = hits.length
+      ? hits.map((h) => `[${h.source} §${h.index}]\n${h.text}`).join("\n\n---\n\n")
+      : "No relevant context found.";
+    const userContent = `RITUAL DOCS CONTEXT:\n\n${context}\n\n---\n\nQUESTION: ${question}`;
+    const history = messages.slice(-6);
+    const apiMessages = [...history, { role: "user", content: userContent }];
+    setMessages((prev) => [...prev, { role: "user", content: question }, { role: "assistant", content: "" }]);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n"); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(data);
+            const token = parsed.choices?.[0]?.delta?.content;
+            if (token) {
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = { role: "assistant", content: next[next.length - 1].content + token };
+                return next;
+              });
+            }
+          } catch {}
         }
-      } catch (err) {
-        setError(err.message);
-        setMessages((prev) => prev.slice(0, -1));
-      } finally {
-        setLoading(false);
       }
-    },
-    [messages, loading],
-  );
+      if (buf) {
+        const lines = buf.split("\n");
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(data);
+            const token = parsed.choices?.[0]?.delta?.content;
+            if (token) {
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = { role: "assistant", content: next[next.length - 1].content + token };
+                return next;
+              });
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+      setMessages((prev) => prev.slice(0, -1));
+    } finally { setLoading(false); }
+  }, [messages, loading]);
 
-  const handleSubmit = () => {
-    const q = input.trim();
-    if (!q) return;
-    setInput("");
-    send(q);
-  };
-
-  const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
+  const handleSubmit = () => { const q = input.trim(); if (!q) return; setInput(""); send(q); };
+  const handleKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } };
 
   return (
-    <div style={S.shell}>
-      {/* ── Sidebar ── */}
-      <aside
-        style={{
-          ...S.sidebar,
-          transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
-        }}
-      >
-        <div style={S.sidebarHeader}>
-          <img src="/ritual-logo.png" alt="Ritual" style={S.sidebarLogo} />
-          <span style={S.sidebarTitle}>Ritual Assistant</span>
-        </div>
-        <div style={S.sidebarSection}>
-          <p style={S.sidebarLabel}>QUICK QUESTIONS</p>
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              style={S.sidebarBtn}
-              onClick={() => {
-                send(s);
-                setSidebarOpen(false);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--green-pale)";
-                e.currentTarget.style.color = "var(--green)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.color = "var(--ink-soft)";
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <div style={S.sidebarSection}>
-          <p style={S.sidebarLabel}>DOCS COVERAGE</p>
-          {[
-            "Vision & Chain",
-            "Autonomous Agents",
-            "Precompiles",
-            "Scheduler",
-          ].map((d) => (
-            <div key={d} style={S.docChip}>
-              <span style={S.docDot} />
-              {d}
+    <>
+      <style>{CSS}</style>
+      <div style={S.shell}>
+
+        {/* ── Sidebar ── */}
+        <aside style={{ ...S.sidebar, transform: sidebarOpen ? "translateX(0)" : "translateX(-280px)" }}>
+          <div style={S.sidebarAccentBar} />
+          <div style={S.sidebarHeader}>
+            <div style={S.sidebarAvatarWrap}>
+              <img src="/ritual-logo.png" alt="Ritual" style={S.sidebarAvatarImg} />
             </div>
-          ))}
-        </div>
-        {messages.length > 0 && (
-          <button
-            style={S.clearBtn}
-            onClick={() => {
-              setMessages([]);
-              setSources([]);
-              setSidebarOpen(false);
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "var(--green-pale)";
-              e.currentTarget.style.borderColor = "var(--green)";
-              e.currentTarget.style.color = "var(--green)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "var(--border-strong)";
-              e.currentTarget.style.color = "var(--ink-muted)";
-            }}
-          >
-            Clear conversation
-          </button>
-        )}
-      </aside>
-
-      {/* Sidebar backdrop */}
-      {sidebarOpen && (
-        <div style={S.backdrop} onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* ── Main ── */}
-      <div style={S.main}>
-        {/* Header */}
-        <header style={S.header}>
-          <button
-            style={S.menuBtn}
-            onClick={() => setSidebarOpen((o) => !o)}
-            aria-label="Menu"
-          >
-            <span style={S.menuLine} />
-            <span style={S.menuLine} />
-            <span style={S.menuLine} />
-          </button>
-          <div style={S.headerBrand}>
-            <img src="/ritual-logo.png" alt="Ritual" style={S.headerLogo} />
             <div>
-              <div style={S.headerTitle}>Ritual Assistant</div>
-              <div style={S.headerSub}>Powered by Ritual Chain docs</div>
+              <div style={S.sidebarName}>Ritual Assistant</div>
+              <div style={S.sidebarTagline}>Documentation AI</div>
             </div>
           </div>
-          <div style={S.headerStatus}>
-            <span
-              style={{
-                ...S.statusDot,
-                background: loading ? "#f59e0b" : "#22c55e",
-              }}
-            />
-            <span style={S.statusText}>{loading ? "Thinking" : "Ready"}</span>
+          <div style={S.hairline} />
+          <div style={S.sidebarSection}>
+            <div style={S.sectionLabel}>QUICK QUESTIONS</div>
+            {SUGGESTIONS.map((s, i) => (
+              <button key={s} className="sb-btn" style={{ ...S.sbBtn, animationDelay: `${i * 0.06}s` }}
+                onClick={() => { send(s); setSidebarOpen(false); }}>
+                <span style={S.sbNum}>{String(i + 1).padStart(2, "0")}</span>
+                <span style={S.sbText}>{s}</span>
+                <span style={S.sbArrow}>›</span>
+              </button>
+            ))}
           </div>
-        </header>
+          <div style={S.hairline} />
+          <div style={S.sidebarSection}>
+            <div style={S.sectionLabel}>KNOWLEDGE BASE</div>
+            {[
+              { icon: "◈", label: "Vision & Chain" },
+              { icon: "⬡", label: "Autonomous Agents" },
+              { icon: "⬢", label: "Precompiles" },
+              { icon: "◷", label: "Scheduler" },
+            ].map((d) => (
+              <div key={d.label} style={S.kbRow}>
+                <span style={S.kbIcon}>{d.icon}</span>
+                <span style={S.kbLabel}>{d.label}</span>
+                <span style={S.kbPill}>indexed</span>
+              </div>
+            ))}
+          </div>
+          {messages.length > 0 && (
+            <div style={S.sbFooter}>
+              <button className="clear-btn" style={S.clearBtn}
+                onClick={() => { setMessages([]); setSources([]); setSidebarOpen(false); }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>
+                </svg>
+                Clear conversation
+              </button>
+            </div>
+          )}
+        </aside>
 
-        {/* Chat area */}
-        <div style={S.chatArea}>
-          {messages.length === 0 ? (
-            <div style={S.welcome}>
-              <div style={S.welcomeLogoWrap}>
-                <img
-                  src="/ritual-logo.png"
-                  alt="Ritual"
-                  style={S.welcomeLogo}
-                />
+        {sidebarOpen && <div style={S.backdrop} onClick={() => setSidebarOpen(false)} />}
+
+        {/* ── Main ── */}
+        <div style={S.main}>
+
+          {/* Header */}
+          <header style={S.header}>
+            <button className="menu-btn" style={S.menuBtn}
+              onClick={() => setSidebarOpen((o) => !o)} aria-label="Menu">
+              <span style={S.menuLine} />
+              <span style={{ ...S.menuLine, width: 14 }} />
+              <span style={{ ...S.menuLine, width: 17 }} />
+            </button>
+            <div style={S.headerBrand}>
+              <div style={S.headerLogoBox}>
+                <img src="/ritual-logo.png" alt="Ritual" style={S.headerLogoImg} />
               </div>
-              <h1 style={S.welcomeTitle}>Ritual Assistant</h1>
-              <p style={S.welcomeDesc}>
-                Ask anything about Ritual Chain — precompiles, autonomous
-                agents,
-                <br />
-                the Scheduler, TEEs, FHE, DKMS, and more.
-              </p>
-              <div style={S.suggGrid}>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    style={S.suggCard}
-                    onClick={() => send(s)}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "var(--green)";
-                      e.currentTarget.style.background = "var(--green-pale)";
-                      e.currentTarget.style.boxShadow = "var(--shadow-md)";
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border)";
-                      e.currentTarget.style.background = "var(--white)";
-                      e.currentTarget.style.boxShadow = "var(--shadow-sm)";
-                      e.currentTarget.style.transform = "translateY(0)";
-                    }}
-                  >
-                    <span style={S.suggArrow}>→</span>
-                    <span>{s}</span>
-                  </button>
-                ))}
+              <div>
+                <div style={S.headerTitle}>Ritual <em style={S.headerTitleEm}>Assistant</em></div>
+                <div style={S.headerSub}>Powered by Ritual Chain docs</div>
               </div>
             </div>
-          ) : (
-            <div style={S.thread}>
-              {messages.map((m, i) => (
-                <div
-                  key={i}
-                  style={m.role === "user" ? S.userRow : S.botRow}
-                  className="msg-enter"
-                >
-                  {m.role === "assistant" && (
-                    <div style={S.botAvatar}>
-                      <img
-                        src="/ritual-logo.png"
-                        alt="Ritual"
-                        style={S.botAvatarImg}
-                      />
+            <div style={S.headerRight}>
+              <div style={S.statusPill}>
+                <span className={loading ? "dot-pulse" : ""} style={{ ...S.statusDot, background: loading ? "#f59e0b" : "#22c55e" }} />
+                <span style={S.statusLabel}>{loading ? "Thinking…" : "Ready"}</span>
+              </div>
+              {messages.length > 0 && (
+                <button className="icon-btn" style={S.iconBtn} title="New conversation"
+                  onClick={() => { setMessages([]); setSources([]); }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* Chat */}
+          <div style={S.chatArea} className="scroll-area">
+            {messages.length === 0 ? (
+              <div style={S.welcome} className="welcome-anim">
+                {/* Hero logo */}
+                <div style={S.heroWrap}>
+                  <div style={S.heroRing} />
+                  <div style={S.heroBox}>
+                    <img src="/ritual-logo.png" alt="Ritual" style={S.heroImg} />
+                  </div>
+                </div>
+
+                <h1 style={S.heroTitle}>
+                  Ritual <em style={S.heroEm}>Assistant</em>
+                </h1>
+                <p style={S.heroDesc}>
+                  Ask anything about Ritual Chain — precompiles, autonomous agents,
+                  the Scheduler, TEEs, FHE, DKMS, and more.
+                </p>
+
+                <div style={S.cardGrid}>
+                  {SUGGESTIONS.map((s, i) => (
+                    <button key={s} className="sugg-card" style={{ ...S.suggCard, animationDelay: `${0.08 + i * 0.07}s` }}
+                      onClick={() => send(s)}>
+                      <span style={S.cardNum}>{String(i + 1).padStart(2, "0")}</span>
+                      <span style={S.cardText}>{s}</span>
+                      <span className="card-arrow" style={S.cardArrow}>→</span>
+                    </button>
+                  ))}
+                </div>
+
+
+              </div>
+            ) : (
+              <div style={S.thread}>
+                {messages.map((m, i) => (
+                  <div key={i} className="msg-in" style={m.role === "user" ? S.userRow : S.botRow}>
+                    {m.role === "assistant" && (
+                      <div style={S.botAvatarBox} className="anim-pop">
+                        <img src="/ritual-logo.png" alt="" style={S.botAvatarImg} />
+                      </div>
+                    )}
+                    <div style={m.role === "user" ? S.userBubble : S.botBubble}>
+                      {m.role === "user" ? (
+                        <p style={S.userText}>{m.content}</p>
+                      ) : (
+                        <div className="prose">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {m.content || (loading && i === messages.length - 1 ? "​" : "")}
+                          </ReactMarkdown>
+                          {loading && i === messages.length - 1 && (
+                            <span className="cursor-blink" style={S.cursor}>▋</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  <div style={m.role === "user" ? S.userBubble : S.botBubble}>
-                    {m.role === "user" ? (
-                      <p style={S.userText}>{m.content}</p>
-                    ) : (
-                      <div className="prose" style={{ fontSize: "0.93rem" }}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {m.content ||
-                            (loading && i === messages.length - 1 ? "​" : "")}
-                        </ReactMarkdown>
-                        {loading && i === messages.length - 1 && (
-                          <span style={S.cursor}>|</span>
-                        )}
+                    {m.role === "user" && (
+                      <div style={S.userAvatarBox}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                        </svg>
                       </div>
                     )}
                   </div>
-                  {m.role === "user" && <div style={S.userAvatar}>You</div>}
-                </div>
-              ))}
+                ))}
 
-              {/* Sources */}
-              {sources.length > 0 && !loading && (
-                <div style={S.sourcesRow}>
-                  <span style={S.sourcesLabel}>Sources</span>
-                  {sources.map((src, i) => (
-                    <span key={i} style={S.sourceChip}>
-                      {src.source}
-                      <span style={S.sourceScore}>§{src.index}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
+                {/* Sources removed per user preference */}
 
-              {error && (
-                <div style={S.errorBox}>
-                  <span style={S.errorIcon}>⚠</span> {error}
-                </div>
-              )}
-
-              <div ref={bottomRef} />
-            </div>
-          )}
-        </div>
-
-        {/* Input bar */}
-        <div style={S.inputBar}>
-          <div
-            style={S.inputWrap}
-            onFocus={(e) => {
-              if (e.target.tagName === "TEXTAREA") {
-                e.currentTarget.style.borderColor = "var(--green)";
-                e.currentTarget.style.boxShadow =
-                  "var(--shadow-lg), 0 0 0 3px var(--green-pale)";
-              }
-            }}
-            onBlur={(e) => {
-              if (e.target.tagName === "TEXTAREA") {
-                e.currentTarget.style.borderColor = "var(--border)";
-                e.currentTarget.style.boxShadow = "var(--shadow-sm)";
-              }
-            }}
-          >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Ask about Ritual Chain..."
-              style={S.textarea}
-              rows={1}
-              disabled={loading}
-            />
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() || loading}
-              onMouseEnter={(e) => {
-                if (!loading && input.trim()) {
-                  e.currentTarget.style.transform = "scale(1.05)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "scale(1)";
-              }}
-              style={{
-                ...S.sendBtn,
-                opacity: !input.trim() || loading ? 0.4 : 1,
-                cursor: !input.trim() || loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? (
-                <span style={S.spinner} />
-              ) : (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                >
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              )}
-            </button>
+                {error && (
+                  <div className="msg-in" style={S.errorBox}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    {error}
+                  </div>
+                )}
+                <div ref={bottomRef} />
+              </div>
+            )}
           </div>
-          <p style={S.inputHint}>
-            Press Enter to send · Shift+Enter for new line
-          </p>
+
+          {/* Input */}
+          <div style={S.inputBar}>
+            <div style={S.inputGlow} />
+            <div style={S.inputOuter}>
+              <div className="input-box" style={S.inputBox}>
+                <span style={S.inputSearchIcon}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </span>
+                <textarea ref={textareaRef} value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKey}
+                  placeholder="Ask about Ritual Chain…"
+                  style={S.textarea} rows={1} disabled={loading} />
+                <button className="send-btn" onClick={handleSubmit}
+                  disabled={!input.trim() || loading}
+                  style={{ ...S.sendBtn, opacity: !input.trim() || loading ? 0.4 : 1, cursor: !input.trim() || loading ? "not-allowed" : "pointer" }}>
+                  {loading
+                    ? <span className="spin" style={S.spinner} />
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                      </svg>
+                  }
+                </button>
+              </div>
+              <div style={S.inputFooter}>
+                <span style={S.inputHintText}>↵ send &nbsp;·&nbsp; ⇧↵ newline</span>
+                {messages.length > 0 && (
+                  <span style={S.exchangeCount}>{Math.floor(messages.length / 2)} exchange{messages.length > 2 ? "s" : ""}</span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────
+// ── CSS ────────────────────────────────────────────────────────
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap');
 
+  :root {
+    --g900: #0f4423; --g700: #1a6b3c; --g500: #2d8f55; --g300: #7ec49a;
+    --g100: #e8f5ee; --g50:  #f2faf5;
+    --cream: #faf8f4; --white: #ffffff;
+    --ink: #18181b; --ink2: #3f3f46; --ink3: #71717a; --ink4: #a1a1aa; --ink5: #d4d4d8;
+    --border: #e8e4dc; --border2: #d4cec4;
+    --fs: 'DM Sans', system-ui, sans-serif;
+    --fm: 'DM Mono', 'Fira Code', monospace;
+    --fserif: 'Playfair Display', Georgia, serif;
+    --ease: cubic-bezier(0.4,0,0.2,1);
+    --sh-green: 0 4px 20px rgba(26,107,60,0.2);
+    --sh-green-sm: 0 2px 10px rgba(26,107,60,0.15);
+    --sh-sm: 0 2px 6px rgba(0,0,0,0.06);
+    --sh-md: 0 6px 24px rgba(0,0,0,0.09);
+  }
+
+  /* Scrollbar */
+  .scroll-area { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+  .scroll-area::-webkit-scrollbar { width: 4px; }
+  .scroll-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Animations */
+  @keyframes fadeUp   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
+  @keyframes popIn    { from { opacity:0; transform:scale(0.75); } to { opacity:1; transform:scale(1); } }
+  @keyframes slideCard{ from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes orbitSpin{ to { transform: rotate(360deg); } }
+  @keyframes blink    { 0%,100% { opacity:1; } 50% { opacity:0; } }
+  @keyframes spin     { to { transform: rotate(360deg); } }
+  @keyframes dotPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+    50%      { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
+  }
+  @keyframes shimmer  {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .welcome-anim  { animation: fadeUp 0.45s var(--ease) both; }
+  .msg-in        { animation: fadeUp 0.22s var(--ease) both; }
+  .anim-pop      { animation: popIn  0.28s var(--ease) both; }
+  .cursor-blink  { animation: blink 1s step-end infinite; }
+  .spin          { animation: spin  0.75s linear infinite; }
+  .dot-pulse     { animation: dotPulse 1.5s ease infinite; }
+  .sugg-card     { animation: slideCard 0.4s var(--ease) both; }
+
+  /* Sidebar buttons */
+  .sb-btn { transition: background 0.14s, color 0.14s; }
+  .sb-btn:hover { background: var(--g50) !important; color: var(--g700) !important; }
+  .sb-btn:hover .sb-arrow { opacity:1 !important; transform: translateX(3px); }
+
+  /* Suggestion cards */
+  .sugg-card { transition: all 0.16s var(--ease) !important; }
+  .sugg-card:hover { border-color: var(--g700) !important; background: var(--g50) !important; transform: translateY(-2px) !important; box-shadow: var(--sh-md) !important; }
+  .sugg-card:hover .card-arrow { transform: translateX(5px); opacity:1 !important; }
+
+  /* Menu */
+  .menu-btn { transition: background 0.14s; }
+  .menu-btn:hover { background: var(--g50) !important; }
+
+  /* Icon btn */
+  .icon-btn { transition: all 0.14s; }
+  .icon-btn:hover { background: var(--g50) !important; color: var(--g700) !important; border-color: var(--g300) !important; }
+
+  /* Clear */
+  .clear-btn { transition: all 0.14s; }
+  .clear-btn:hover { background: #fef2f2 !important; border-color: #fca5a5 !important; color: #dc2626 !important; }
+
+  /* Input box focus */
+  .input-box:focus-within {
+    border-color: var(--g700) !important;
+    box-shadow: var(--sh-md), 0 0 0 3px rgba(26,107,60,0.1) !important;
+  }
+
+  /* Send button */
+  .send-btn:not(:disabled):hover { background: var(--g900) !important; transform: scale(1.07) !important; }
+  .send-btn { transition: all 0.14s var(--ease); }
+
+  /* Prose */
+  .prose { font-family: var(--fs); font-size: 0.915rem; line-height: 1.8; color: var(--ink2); }
+  .prose p { margin: 0 0 0.75em; } .prose p:last-child { margin-bottom: 0; }
+  .prose h1,.prose h2,.prose h3 { font-family: var(--fserif); color: var(--ink); margin: 1.25em 0 0.4em; line-height: 1.3; }
+  .prose h1 { font-size: 1.22em; } .prose h2 { font-size: 1.1em; } .prose h3 { font-size: 1em; font-style: italic; }
+  .prose ul,.prose ol { padding-left: 1.5em; margin: 0.5em 0; }
+  .prose li { margin: 0.22em 0; }
+  .prose strong { font-weight: 600; color: var(--ink); }
+  .prose a { color: var(--g700); }
+  .prose hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+  .prose code {
+    font-family: var(--fm); font-size: 0.82em;
+    background: var(--g100); color: var(--g900);
+    padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(26,107,60,0.2);
+  }
+  .prose pre {
+    background: #f5f3ef; border: 1px solid var(--border);
+    border-left: 3px solid var(--g700);
+    border-radius: 8px; padding: 14px 16px;
+    overflow-x: auto; margin: 0.9em 0;
+  }
+  .prose pre code { background:none; color:var(--ink2); padding:0; border:none; font-size:0.83em; line-height:1.65; }
+  .prose table { width:100%; border-collapse:collapse; font-size:0.86em; margin:0.9em 0; }
+  .prose th {
+    background: var(--g100); color: var(--g900); font-weight:600;
+    font-size:0.78em; letter-spacing:0.04em; text-align:left;
+    padding:8px 12px; border:1px solid rgba(26,107,60,0.2);
+  }
+  .prose td { padding:7px 12px; border:1px solid var(--border); color:var(--ink2); vertical-align:top; }
+  .prose tr:nth-child(even) td { background: rgba(0,0,0,0.016); }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .prose { font-size: 0.87rem; }
+  }
+`;
+
+// ── Styles ─────────────────────────────────────────────────────
 const S = {
   shell: {
-    display: "flex",
-    height: "100dvh",
-    background: "var(--cream)",
-    overflow: "hidden",
-    position: "relative",
+    display: "flex", minHeight: "100dvh",
+    backgroundColor: "var(--cream)",
+    backgroundImage: "url('/bg.png')",
+    backgroundRepeat: "no-repeat", backgroundSize: "cover",
+    backgroundPosition: "center", backgroundAttachment: "fixed",
+    overflow: "hidden", position: "relative", fontFamily: "var(--fs)",
   },
 
-  // Sidebar - Premium
+  // ── Sidebar
   sidebar: {
-    position: "fixed",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 280,
-    background: "var(--white)",
-    borderRight: "1px solid var(--border)",
-    zIndex: 50,
-    transition: "transform var(--transition-base)",
-    display: "flex",
-    flexDirection: "column",
-    padding: "0 0 20px",
-    boxShadow: "var(--shadow-lg)",
-    overflowY: "auto",
+    position: "fixed", left: 0, top: 0, bottom: 0, width: 280,
+    background: "var(--white)", borderRight: "1px solid var(--border)",
+    zIndex: 50, transition: "transform 0.28s var(--ease)",
+    display: "flex", flexDirection: "column",
+    boxShadow: "var(--sh-md)", overflowY: "auto",
+  },
+  sidebarAccentBar: {
+    height: 3, flexShrink: 0,
+    background: "linear-gradient(90deg, var(--g900) 0%, var(--g500) 50%, var(--g100) 100%)",
   },
   sidebarHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "20px 20px 16px",
-    borderBottom: "1px solid var(--border)",
-    marginBottom: 8,
+    display: "flex", alignItems: "center", gap: 12,
+    padding: "18px 18px 15px",
   },
-  sidebarLogo: { width: 32, height: 32, objectFit: "contain" },
-  sidebarTitle: {
-    fontSize: "1.05rem",
-    fontWeight: 700,
-    color: "var(--ink)",
-    letterSpacing: "-0.01em",
+  sidebarAvatarWrap: {
+    width: 38, height: 38, background: "var(--g700)", borderRadius: 10,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, boxShadow: "var(--sh-green-sm)",
   },
-  sidebarSection: { padding: "14px 16px" },
-  sidebarLabel: {
-    fontSize: "0.65rem",
-    fontWeight: 700,
-    letterSpacing: "0.12em",
-    color: "var(--ink-faint)",
-    marginBottom: 10,
-    textTransform: "uppercase",
+  sidebarAvatarImg: { width: 23, height: 23, objectFit: "contain" },
+  sidebarName: {
+    fontFamily: "var(--fserif)", fontSize: "0.97rem", fontWeight: 500,
+    color: "var(--ink)", lineHeight: 1.25,
   },
-  sidebarBtn: {
-    display: "block",
-    width: "100%",
-    textAlign: "left",
-    background: "transparent",
-    border: "none",
-    padding: "10px 12px",
-    fontSize: "0.82rem",
-    color: "var(--ink-soft)",
-    cursor: "pointer",
-    borderRadius: "var(--radius-sm)",
-    lineHeight: 1.45,
-    marginBottom: 4,
-    transition: "all var(--transition-fast)",
-    fontFamily: "var(--font-sans)",
-    fontWeight: 500,
-  },
-  docChip: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "6px 12px",
-    fontSize: "0.8rem",
-    color: "var(--ink-muted)",
-    borderRadius: "var(--radius-sm)",
-    transition: "background var(--transition-fast)",
-  },
-  docDot: {
-    width: 6,
-    height: 6,
-    borderRadius: "50%",
-    background: "var(--success)",
+  sidebarTagline: { fontSize: "0.67rem", color: "var(--ink4)", marginTop: 2 },
+  hairline: {
+    height: 1, margin: "0",
+    background: "linear-gradient(90deg, transparent, var(--border), transparent)",
     flexShrink: 0,
   },
+  sidebarSection: { padding: "12px 12px 6px" },
+  sectionLabel: {
+    fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.13em",
+    color: "var(--ink4)", marginBottom: 8, paddingLeft: 4,
+  },
+  sbBtn: {
+    display: "flex", alignItems: "center", gap: 9, width: "100%",
+    background: "transparent", border: "none", padding: "9px 8px",
+    fontSize: "0.81rem", color: "var(--ink2)", cursor: "pointer",
+    borderRadius: 6, marginBottom: 1, textAlign: "left",
+    fontFamily: "var(--fs)",
+  },
+  sbNum: { fontSize: "0.62rem", fontFamily: "var(--fm)", color: "var(--g500)", fontWeight: 600, flexShrink: 0, width: 18 },
+  sbText: { flex: 1, lineHeight: 1.4 },
+  sbArrow: { fontSize: "1rem", color: "var(--g500)", opacity: 0, transition: "all 0.14s", flexShrink: 0 },
+  kbRow: { display: "flex", alignItems: "center", gap: 9, padding: "6px 8px", borderRadius: 6, marginBottom: 1 },
+  kbIcon: { fontSize: "0.88rem", color: "var(--g700)", width: 18, textAlign: "center", flexShrink: 0 },
+  kbLabel: { fontSize: "0.81rem", color: "var(--ink3)", flex: 1 },
+  kbPill: {
+    fontSize: "0.58rem", background: "var(--g100)", color: "var(--g700)",
+    padding: "2px 8px", borderRadius: 20, fontWeight: 600, letterSpacing: "0.02em",
+  },
+  sbFooter: { marginTop: "auto", padding: "14px 12px", borderTop: "1px solid var(--border)" },
   clearBtn: {
-    margin: "auto 16px 0",
-    padding: "10px 16px",
-    background: "transparent",
-    border: "1.5px solid var(--border-strong)",
-    borderRadius: "var(--radius-md)",
-    fontSize: "0.82rem",
-    fontWeight: 500,
-    color: "var(--ink-muted)",
-    cursor: "pointer",
-    fontFamily: "var(--font-sans)",
-    transition: "all var(--transition-fast)",
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+    width: "100%", padding: "9px 14px", background: "transparent",
+    border: "1px solid var(--border)", borderRadius: 8,
+    fontSize: "0.81rem", color: "var(--ink3)", cursor: "pointer",
+    fontFamily: "var(--fs)",
   },
   backdrop: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 40,
-    background: "rgba(0,0,0,0.25)",
-    backdropFilter: "blur(2px)",
-    transition: "opacity var(--transition-base)",
+    position: "fixed", inset: 0, zIndex: 40,
+    background: "rgba(0,0,0,0.18)", backdropFilter: "blur(2px)",
   },
 
-  // Main
-  main: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    minWidth: 0,
-    height: "100%",
-  },
+  // ── Main
+  main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: "100%", position: "relative" },
 
-  // Header - Premium
+  // ── Header
   header: {
-    display: "flex",
-    alignItems: "center",
-    gap: 14,
-    padding: "14px 20px",
-    background: "var(--white)",
-    borderBottom: "1px solid var(--border)",
-    flexShrink: 0,
-    boxShadow: "var(--shadow-xs)",
+    display: "flex", alignItems: "center", gap: 12, padding: "0 20px", height: 60,
+    background: "rgba(255,255,255,0.94)", backdropFilter: "blur(14px)",
+    borderBottom: "1px solid var(--border)", flexShrink: 0,
+    boxShadow: "0 1px 0 var(--border)", position: "sticky", top: 0, zIndex: 20,
   },
   menuBtn: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 5,
-    background: "transparent",
-    border: "none",
-    cursor: "pointer",
-    padding: "8px 6px",
-    borderRadius: "var(--radius-sm)",
-    flexShrink: 0,
-    transition: "all var(--transition-fast)",
+    display: "flex", flexDirection: "column", gap: 5,
+    background: "transparent", border: "none", cursor: "pointer",
+    padding: "8px 6px", borderRadius: 6, flexShrink: 0,
   },
-  menuLine: {
-    display: "block",
-    width: 20,
-    height: 2.5,
-    background: "var(--ink-soft)",
-    borderRadius: 1.25,
-    transition: "all var(--transition-fast)",
+  menuLine: { display: "block", width: 20, height: 2, background: "var(--ink2)", borderRadius: 1 },
+  headerBrand: { display: "flex", alignItems: "center", gap: 11, flex: 1 },
+  headerLogoBox: {
+    width: 36, height: 36, background: "var(--g700)", borderRadius: 9,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    boxShadow: "var(--sh-green-sm)", flexShrink: 0,
   },
-  headerBrand: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  headerLogo: { width: 36, height: 36, objectFit: "contain" },
+  headerLogoImg: { width: 22, height: 22, objectFit: "contain" },
   headerTitle: {
-    fontSize: "1.1rem",
-    fontWeight: 700,
-    color: "var(--ink)",
-    lineHeight: 1.2,
-    letterSpacing: "-0.01em",
+    fontFamily: "var(--fserif)", fontSize: "1.04rem", fontWeight: 500,
+    color: "var(--ink)", lineHeight: 1.25, letterSpacing: "-0.01em",
   },
-  headerSub: {
-    fontSize: "0.7rem",
-    color: "var(--ink-faint)",
-    marginTop: 2,
-    fontWeight: 500,
+  headerTitleEm: { fontStyle: "italic", color: "var(--g700)" },
+  headerSub: { fontSize: "0.67rem", color: "var(--ink4)", marginTop: 2, fontWeight: 400 },
+  headerRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  statusPill: {
+    display: "flex", alignItems: "center", gap: 7,
+    background: "var(--cream)", border: "1px solid var(--border)",
+    padding: "5px 12px", borderRadius: 20,
   },
-  headerStatus: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 0,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: "50%",
-    boxShadow: "0 0 0 2px var(--white), 0 0 4px currentColor",
-    transition:
-      "background var(--transition-fast), box-shadow var(--transition-fast)",
-  },
-  statusText: {
-    fontSize: "0.75rem",
-    color: "var(--ink-muted)",
-    fontFamily: "var(--font-mono)",
-    fontWeight: 500,
+  statusDot: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0, transition: "background 0.2s" },
+  statusLabel: { fontSize: "0.71rem", color: "var(--ink3)", fontFamily: "var(--fm)", fontWeight: 500 },
+  iconBtn: {
+    width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+    background: "transparent", border: "1px solid var(--border)", borderRadius: 6,
+    color: "var(--ink3)", cursor: "pointer",
   },
 
-  // Chat
-  chatArea: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "28px 24px",
-    background: "var(--cream)",
-  },
+  // ── Chat area
+  chatArea: { flex: 1, overflowY: "auto", padding: "28px 20px 20px", background: "transparent" },
 
-  // Welcome - Premium
-  welcome: {
-    maxWidth: 720,
-    margin: "0 auto",
-    paddingTop: "8vh",
-    textAlign: "center",
+  // ── Welcome
+  welcome: { maxWidth: 620, margin: "0 auto", paddingTop: "7vh", textAlign: "center" },
+  heroWrap: {
+    position: "relative", width: 96, height: 96, margin: "0 auto 24px",
+    display: "flex", alignItems: "center", justifyContent: "center",
   },
-  welcomeLogoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: "var(--radius-xl)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    margin: "0 auto 28px",
+  heroRing: {
+    position: "absolute", inset: -10, borderRadius: "50%",
+    border: "1.5px dashed rgba(26,107,60,0.3)",
+    animation: "orbitSpin 10s linear infinite",
   },
-  welcomeLogo: { width: 52, height: 52, objectFit: "contain" },
-  welcomeTitle: {
-    fontSize: "1.9rem",
-    fontWeight: 700,
-    color: "var(--ink)",
-    marginBottom: 14,
-    letterSpacing: "-0.02em",
+  heroBox: {
+    width: 78, height: 78, background: "var(--g700)", borderRadius: 20,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    boxShadow: "var(--sh-green), 0 0 0 8px rgba(26,107,60,0.07)",
+    position: "relative", zIndex: 1,
   },
-  welcomeDesc: {
-    fontSize: "0.95rem",
-    color: "var(--ink-muted)",
-    lineHeight: 1.75,
-    marginBottom: 40,
-    fontWeight: 500,
+  heroImg: { width: 48, height: 48, objectFit: "contain" },
+  heroTitle: {
+    fontFamily: "var(--fserif)", fontSize: "2.1rem", fontWeight: 700,
+    color: "var(--ink)", marginBottom: 12, letterSpacing: "-0.02em", lineHeight: 1.2,
   },
-  suggGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: 12,
-    textAlign: "left",
+  heroEm: { fontStyle: "italic", color: "var(--g700)" },
+  heroDesc: {
+    fontSize: "0.89rem", color: "var(--ink3)", lineHeight: 1.8,
+    marginBottom: 32, fontWeight: 400, maxWidth: 460, margin: "0 auto 32px",
+  },
+  cardGrid: {
+    display: "flex", flexDirection: "column", gap: 8, maxWidth: 520, margin: "0 auto",
   },
   suggCard: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 10,
-    background: "var(--white)",
-    border: "1.5px solid var(--border)",
-    borderRadius: "var(--radius-md)",
-    padding: "14px 16px",
-    fontSize: "0.85rem",
-    color: "var(--ink-soft)",
-    cursor: "pointer",
-    lineHeight: 1.5,
-    fontFamily: "var(--font-sans)",
-    fontWeight: 500,
-    transition: "all var(--transition-fast)",
-    boxShadow: "var(--shadow-sm)",
-    textAlign: "left",
+    display: "flex", alignItems: "center", gap: 12,
+    background: "rgba(255,255,255,0.9)", backdropFilter: "blur(8px)",
+    border: "1.5px solid var(--border)", borderRadius: 12,
+    padding: "13px 16px", fontSize: "0.87rem", color: "var(--ink2)",
+    cursor: "pointer", lineHeight: 1.4, fontFamily: "var(--fs)",
+    fontWeight: 400, boxShadow: "var(--sh-sm)", textAlign: "left",
   },
-  suggArrow: {
-    color: "var(--green)",
-    flexShrink: 0,
-    fontSize: "1rem",
-    marginTop: 0,
-    transition: "transform var(--transition-fast)",
+  cardNum: {
+    fontSize: "0.62rem", fontFamily: "var(--fm)", color: "var(--g500)",
+    fontWeight: 600, flexShrink: 0, opacity: 0.7, width: 18,
+  },
+  cardText: { flex: 1 },
+  cardArrow: {
+    fontSize: "0.88rem", color: "var(--g500)", flexShrink: 0, opacity: 0.5,
+    transition: "transform 0.15s, opacity 0.15s",
+  },
+  heroFootnote: {
+    fontSize: "0.66rem", color: "var(--ink5)", marginTop: 28,
+    fontFamily: "var(--fm)", letterSpacing: "0.02em",
   },
 
-  // Thread - Premium
-  thread: {
-    maxWidth: 800,
-    margin: "0 auto",
-    display: "flex",
-    flexDirection: "column",
-    gap: 18,
+  // ── Thread
+  thread: { maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 8 },
+  userRow: { display: "flex", alignItems: "flex-start", gap: 10, justifyContent: "flex-end" },
+  botRow:  { display: "flex", alignItems: "flex-start", gap: 10 },
+  botAvatarBox: {
+    width: 32, height: 32, background: "var(--g700)", borderRadius: 8,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0, marginTop: 3, boxShadow: "var(--sh-green-sm)",
   },
-  userRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    justifyContent: "flex-end",
-    animation: "fadeUp var(--transition-base) ease",
-  },
-  botRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 12,
-    animation: "fadeUp var(--transition-base) ease",
-  },
-  botAvatar: {
-    width: 36,
-    height: 36,
-    background:
-      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
-    borderRadius: "var(--radius-md)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 2,
-    boxShadow: "var(--shadow-green)",
-  },
-  botAvatarImg: { width: 20, height: 20, objectFit: "contain" },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    background: "var(--ink)",
-    color: "var(--white)",
-    borderRadius: "var(--radius-md)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "0.7rem",
-    fontWeight: 700,
-    flexShrink: 0,
-    marginTop: 2,
-    letterSpacing: "0.02em",
+  botAvatarImg: { width: 19, height: 19, objectFit: "contain" },
+  userAvatarBox: {
+    width: 32, height: 32, background: "var(--ink)", color: "rgba(255,255,255,0.85)",
+    borderRadius: 8, display: "flex", alignItems: "center",
+    justifyContent: "center", flexShrink: 0, marginTop: 3,
   },
   userBubble: {
-    maxWidth: "72%",
-    background:
-      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
-    borderRadius: "16px 4px 16px 16px",
-    padding: "12px 16px",
-    boxShadow: "var(--shadow-green)",
+    maxWidth: "70%", background: "var(--g700)",
+    backgroundImage: "linear-gradient(135deg, var(--g700) 0%, var(--g500) 100%)",
+    borderRadius: "14px 4px 14px 14px", padding: "11px 15px",
+    boxShadow: "var(--sh-green-sm)",
   },
-  userText: {
-    color: "var(--white)",
-    fontSize: "0.93rem",
-    lineHeight: 1.6,
-    fontWeight: 500,
-  },
+  userText: { color: "rgba(255,255,255,0.93)", fontSize: "0.9rem", lineHeight: 1.65, fontWeight: 400, margin: 0 },
   botBubble: {
-    flex: 1,
-    maxWidth: "88%",
-    background: "var(--white)",
-    border: "1px solid var(--border)",
-    borderRadius: "6px 16px 16px 16px",
-    padding: "16px 18px",
-    boxShadow: "var(--shadow-sm)",
+    flex: 1, maxWidth: "87%",
+    background: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)",
+    border: "1px solid var(--border)", borderRadius: "4px 14px 14px 14px",
+    padding: "14px 17px", boxShadow: "var(--sh-sm)",
   },
-  cursor: {
-    display: "inline-block",
-    animation: "blink 1.2s step-end infinite",
-    color: "var(--green)",
-    fontWeight: 400,
-    marginLeft: 2,
-  },
+  cursor: { display: "inline-block", color: "var(--g700)", fontSize: "0.85em", marginLeft: 2, verticalAlign: "middle" },
 
-  // Sources - Premium
-  sourcesRow: {
-    display: "flex",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingLeft: 48,
-    marginTop: 4,
-  },
-  sourcesLabel: {
-    fontSize: "0.7rem",
-    color: "var(--ink-faint)",
-    fontWeight: 600,
-    letterSpacing: "0.05em",
-    textTransform: "uppercase",
-  },
-  sourceChip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    background: "var(--green-pale)",
-    border: "1px solid var(--green-border)",
-    color: "var(--green)",
-    padding: "4px 11px",
-    borderRadius: "20px",
-    fontSize: "0.72rem",
-    fontWeight: 600,
-    transition: "all var(--transition-fast)",
-  },
-  sourceScore: {
-    color: "var(--green-mid)",
-    fontSize: "0.65rem",
-    fontWeight: 700,
-  },
-
-  // Error - Premium
+  // ── Error
   errorBox: {
-    background: "linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%)",
-    border: "1.5px solid #fecaca",
-    borderRadius: "var(--radius-md)",
-    color: "#dc2626",
-    padding: "12px 16px",
-    fontSize: "0.85rem",
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-    boxShadow: "0 2px 4px rgba(220, 38, 38, 0.1)",
+    background: "#fff8f8", border: "1px solid #fecaca", borderLeft: "3px solid #dc2626",
+    borderRadius: 10, color: "#dc2626", padding: "12px 16px",
+    fontSize: "0.84rem", display: "flex", gap: 10, alignItems: "center",
+    maxWidth: 760, margin: "0 auto", width: "100%",
   },
-  errorIcon: { fontSize: "1.1rem", flexShrink: 0 },
 
-  // Input - Premium
+  // ── Input bar
   inputBar: {
-    padding: "16px 24px 18px",
-    background: "var(--white)",
-    borderTop: "1px solid var(--border)",
-    flexShrink: 0,
-    boxShadow: "0 -2px 8px rgba(0,0,0,0.03)",
+    position: "sticky", bottom: 0, padding: "0 0 16px",
+    background: "rgba(255,255,255,0.94)", backdropFilter: "blur(14px)",
+    borderTop: "1px solid var(--border)", flexShrink: 0, zIndex: 10,
   },
-  inputWrap: {
-    display: "flex",
-    gap: 12,
-    alignItems: "flex-end",
-    maxWidth: 800,
-    margin: "0 auto",
-    background: "var(--cream)",
-    border: "1.5px solid var(--border)",
-    borderRadius: "var(--radius-lg)",
-    padding: "10px 12px 10px 18px",
-    boxShadow: "var(--shadow-sm)",
-    transition: "all var(--transition-fast)",
+  inputGlow: {
+    height: 2, marginBottom: 12,
+    background: "linear-gradient(90deg, transparent 0%, var(--g700) 25%, var(--g300) 50%, var(--g700) 75%, transparent 100%)",
+    opacity: 0.3,
+  },
+  inputOuter: { maxWidth: 760, margin: "0 auto", padding: "0 20px" },
+  inputBox: {
+    display: "flex", gap: 10, alignItems: "flex-end",
+    background: "var(--white)", border: "1.5px solid var(--border)",
+    borderRadius: 14, padding: "8px 10px 8px 14px",
+    boxShadow: "var(--sh-sm)", transition: "all 0.15s var(--ease)",
+  },
+  inputSearchIcon: {
+    color: "var(--ink4)", flexShrink: 0, paddingBottom: 8,
+    display: "flex", alignItems: "center",
   },
   textarea: {
-    flex: 1,
-    background: "transparent",
-    border: "none",
-    outline: "none",
-    resize: "none",
-    fontFamily: "var(--font-sans)",
-    fontSize: "0.94rem",
-    color: "var(--ink)",
-    lineHeight: 1.6,
-    padding: "6px 0",
-    minHeight: 24,
-    maxHeight: 120,
-    fontWeight: 500,
+    flex: 1, background: "transparent", border: "none", outline: "none",
+    resize: "none", fontFamily: "var(--fs)", fontSize: "0.92rem", color: "var(--ink)",
+    lineHeight: 1.65, padding: "6px 0", minHeight: 26, maxHeight: 120, fontWeight: 400,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    background:
-      "linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%)",
-    color: "var(--white)",
-    border: "none",
-    borderRadius: "var(--radius-md)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    transition: "all var(--transition-fast)",
-    boxShadow: "var(--shadow-green)",
-    cursor: "pointer",
-    fontWeight: 600,
+    width: 37, height: 37, background: "var(--g700)", color: "var(--white)",
+    border: "none", borderRadius: 9, display: "flex",
+    alignItems: "center", justifyContent: "center",
+    flexShrink: 0, boxShadow: "var(--sh-green-sm)",
   },
   spinner: {
-    display: "block",
-    width: 18,
-    height: 18,
-    border: "2.5px solid rgba(255,255,255,0.3)",
-    borderTopColor: "white",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
+    display: "block", width: 16, height: 16,
+    border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%",
   },
-  inputHint: {
-    textAlign: "center",
-    fontSize: "0.68rem",
-    color: "var(--ink-faint)",
-    marginTop: 8,
-    maxWidth: 800,
-    marginLeft: "auto",
-    marginRight: "auto",
-    fontWeight: 500,
-    letterSpacing: "0.01em",
-  },
+  inputFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 7, padding: "0 2px" },
+  inputHintText: { fontSize: "0.67rem", color: "var(--ink4)", fontFamily: "var(--fm)", letterSpacing: "0.02em" },
+  exchangeCount: { fontSize: "0.67rem", color: "var(--ink4)", fontFamily: "var(--fm)" },
 };

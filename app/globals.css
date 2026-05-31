@@ -36,6 +36,8 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Menlo, monospace;
+  --font-heading: 'HelveticaNowDisplay-Medium', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'HelveticaNowDisplayW01-Rg', 'Helvetica Neue', Arial, sans-serif;
 
   /* Spacing Scale */
   --space-0: 0;
@@ -89,14 +91,17 @@ html, body {
 }
 
 body {
-  background: var(--cream);
+  background: transparent;
   color: var(--ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-body), var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeSpeed;
+}
+html, body {
+  background: transparent;
 }
 
 /* Animations - Refined */
