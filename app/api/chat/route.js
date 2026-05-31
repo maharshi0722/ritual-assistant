@@ -34,7 +34,7 @@ export async function POST(req) {
           "X-Title": "Ritual Assistant",
         },
         body: JSON.stringify({
-          model: process.env.CHAT_MODEL || "anthropic/claude-haiku-4-5",
+          model: process.env.CHAT_MODEL || "openai/gpt-4o-mini",
           messages: [{ role: "system", content: SYSTEM }, ...messages],
           stream: true,
           temperature: 0.2,
