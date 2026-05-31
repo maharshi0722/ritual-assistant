@@ -1,30 +1,3 @@
-## Use Cases — What Becomes Possible
-
-### Agents That Live Forever
-
-Autonomous agents that persist onchain indefinitely. They hold their own keys, schedule their own execution, and survive crashes without human intervention. Immortality as a protocol guarantee.
-
-### Agent-First RWA
-
-A Hyperliquid-style exchange for RWAs where cancels execute before takes at the protocol level. Dark and lit execution. Direct real-world liquidity for autonomous agents.
-
-### Agent-Native Companies
-
-An autonomous entity that runs a service, hires other agents for labor, compute, and data, earns revenue, and issues ownership tokens to stakeholders. Governance set at creation — no human operator or back office.
-
-### Private ChatGPT Onchain
-
-A private, multimodal ChatGPT that humans and agents both use. Prompts stay encrypted. Responses stay encrypted. No centralized interface between you and the model.
-
-## Programs
-
-- Ritual
-- Shrine
-
-Shrine helps early teams build on Ritual from first prototype to production deployment. Technical support, infrastructure access, and go-to-market guidance for projects building agents and autonomous systems on Ritual Chain.
-
-[Apply to Shrine](https://shrine.ritualfoundation.org/apply)
-
 ## Meet the people Behind Ritual Foundation
 
 ### Ben Perszyk
@@ -98,5 +71,3 @@ Maintainer at OpenClaw, Founder at OpenKnots, former DevRel Engineer at Morpho L
 ![Saneel](https://www.ritualfoundation.org/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fcowr9u8f%2Fproduction%2F87aba750f088cf8a8ca3f31bc8ec27e2442ab007-256x256.webp%3Fauto%3Dformat&w=128&q=75)
 
 Founding Team at Alkimiya, Venture Partner at Accomplice, Junior Partner at Dragonfly, M.E.T. at UC Berkeley.
-
-(Images omitted for brevity.)
