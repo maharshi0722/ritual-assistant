@@ -605,13 +605,24 @@ const CSS = `
 
   /* Prose */
   .prose { font-family: var(--fs); font-size: 0.97rem; line-height: 1.92; color: rgba(15,20,30,0.96); }
-  .prose p { margin: 0 0 0.85em; } .prose p:last-child { margin-bottom: 0; }
-  .prose h1,.prose h2,.prose h3 { font-family: var(--fserif); color: rgba(15,20,30,0.96); margin: 1.25em 0 0.4em; line-height: 1.3; }
-  .prose h1 { font-size: 1.22em; } .prose h2 { font-size: 1.1em; } .prose h3 { font-size: 1em; font-style: italic; }
-  .prose ul,.prose ol { padding-left: 1.5em; margin: 0.5em 0; }
-  .prose li { margin: 0.22em 0; }
-  .prose strong { font-weight: 600; color: var(--ink); }
-  .prose a { color: var(--g700); }
+  .prose p { margin: 0 0 0.95em; } .prose p:last-child { margin-bottom: 0; }
+  .prose h1,.prose h2,.prose h3 { font-family: var(--fserif); margin: 1.25em 0 0.4em; line-height: 1.3; }
+  .prose h1 { font-size: 1.22em; color: var(--g900); }
+  .prose h2 { font-size: 1.1em; color: var(--g700); }
+  .prose h3 { font-size: 1em; color: var(--g500); font-style: italic; }
+  .prose ul,.prose ol { padding-left: 1.65em; margin: 0.7em 0; }
+  .prose li { margin: 0.35em 0; }
+  .prose strong { font-weight: 700; color: var(--g900); }
+  .prose a { color: var(--g700); text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: var(--g900); }
+  .prose blockquote {
+    border-left: 3px solid var(--g100);
+    background: rgba(46,105,84,0.05);
+    color: rgba(19,34,20,0.95);
+    padding: 0.95em 1.1em;
+    margin: 1.1em 0;
+    border-radius: 12px;
+  }
   .prose hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
   .prose code {
     font-family: var(--fm); font-size: 0.82em;
@@ -634,14 +645,21 @@ const CSS = `
   .prose td { padding:7px 12px; border:1px solid var(--border); color:var(--ink2); vertical-align:top; }
   .prose tr:nth-child(even) td { background: rgba(0,0,0,0.016); }
   .prose img {
+    width: auto;
     max-width: 100%;
+    max-height: 55vh;
     height: auto;
     display: block;
     margin: 1em auto;
     border-radius: 14px;
     object-fit: contain;
+    overflow: hidden;
   }
   .prose img:not([src]) { max-width: 100%; }
+
+  @media (max-width: 720px) {
+    .prose img { width: 100%; }
+  }
 
   /* Responsive */
   @media (max-width: 640px) {
@@ -884,11 +902,13 @@ const S = {
     color: "var(--white)",
     lineHeight: 1.25,
     letterSpacing: "-0.01em",
+    textShadow: "0 1px 6px rgba(0,0,0,0.25)",
   },
   headerTitleEm: { fontStyle: "italic", color: "var(--g700)" },
   headerSub: {
     fontSize: "0.67rem",
-    color: "rgba(255,255,255,0.72)",
+    color: "rgba(255,255,255,0.8)",
+    textShadow: "0 1px 5px rgba(0,0,0,0.18)",
     marginTop: 2,
     fontWeight: 400,
   },
@@ -981,13 +1001,15 @@ const S = {
     marginBottom: 14,
     letterSpacing: "-0.02em",
     lineHeight: 1.15,
+    textShadow: "0 2px 12px rgba(0,0,0,0.5), 0 4px 24px rgba(0,0,0,0.35)",
   },
   heroEm: { fontStyle: "italic", color: "var(--g700)" },
   heroDesc: {
     fontSize: "1.05rem",
-    color: "rgba(255,255,255,0.9)",
+    color: "rgba(255,255,255,0.98)",
     lineHeight: 1.9,
     marginBottom: 28,
+    textShadow: "0 2px 10px rgba(0,0,0,0.4), 0 4px 20px rgba(0,0,0,0.25)",
     fontWeight: 400,
     maxWidth: 540,
     margin: "0 auto 32px",
