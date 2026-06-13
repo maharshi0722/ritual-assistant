@@ -435,8 +435,7 @@ export default function ChatApp() {
                 <div style={S.headerTitle}>
                   Ritual <em style={S.headerTitleEm}>Assistant</em>
                 </div>
-                <div style={S.headerSub}>Powered by Ritual Chain docs</div>
-              </div>
+               </div>
             </div>
             <div style={S.headerRight}>
               {!walletConnected ? (
