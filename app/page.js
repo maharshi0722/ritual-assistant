@@ -3,6 +3,36 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { BrowserProvider, Contract, toUtf8Bytes, keccak256 } from "ethers";
+import {
+  RITUAL_CHAIN,
+  switchToRitualChain,
+  isOnRitualChain,
+  getExplorerLink,
+  formatAddress,
+} from "../lib/ritual-chain.js";
+
+// ── Blockchain Configuration ──
+const CONTRACT_ADDRESS = "0xE08A14a9eC81616ad1b6b569A4aeDd5d8e667Dd2";
+const CONTRACT_ABI = [
+  {
+    inputs: [{ internalType: "bytes32", name: "promptHash", type: "bytes32" }],
+    name: "anchorPrompt",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "uint256", name: "id", type: "uint256" },
+      { internalType: "bytes32", name: "promptHash", type: "bytes32" },
+    ],
+    name: "verifyPrompt",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+];
 
 const SUGGESTIONS = [
   "What is Ritual Chain?",
@@ -53,6 +83,10 @@ export default function ChatApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [walletAddress, setWalletAddress] = useState(null);
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txStatus, setTxStatus] = useState(null);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const sendInFlight = useRef(false);
@@ -68,97 +102,205 @@ export default function ChatApp() {
     ta.style.height = Math.min(ta.scrollHeight, 140) + "px";
   }, [input]);
 
+  // ── Wallet Connection Functions ──
+  const connectWallet = async () => {
+    try {
+      if (!window.ethereum) {
+        alert("Please install MetaMask to use this feature");
+        return;
+      }
+      const provider = new BrowserProvider(window.ethereum);
+
+      // Check if on Ritual Chain, if not, prompt to switch
+      const isRitual = await isOnRitualChain(provider);
+      if (!isRitual) {
+        setTxStatus("Switching to Ritual Chain...");
+        const switched = await switchToRitualChain(window.ethereum);
+        if (!switched) {
+          setError(
+            "Please switch to Ritual Chain (Chain ID: 1979) manually in MetaMask",
+          );
+          setTxStatus(null);
+          return;
+        }
+        setTxStatus(null);
+      }
+
+      const accounts = await provider.send("eth_requestAccounts", []);
+      setWalletAddress(accounts[0]);
+      setWalletConnected(true);
+      setError(null);
+    } catch (err) {
+      console.error("Wallet connection error:", err);
+      setError("Failed to connect wallet. Please try again.");
+    }
+  };
+
+  const disconnectWallet = () => {
+    setWalletAddress(null);
+    setWalletConnected(false);
+    setTxStatus(null);
+  };
+
+  const anchorPromptOnChain = async (promptText) => {
+    if (!walletConnected || !walletAddress) {
+      alert("Please connect your wallet first");
+      return false;
+    }
+
+    try {
+      setTxLoading(true);
+      setTxStatus("Anchoring prompt on Ritual Chain...");
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      // Create keccak256 hash of the prompt
+      const promptHash = keccak256(toUtf8Bytes(promptText));
+
+      // Call the anchorPrompt function
+      const tx = await contract.anchorPrompt(promptHash);
+      setTxStatus(
+        `Transaction sent! Tx: ${tx.hash.slice(0, 6)}...${tx.hash.slice(-4)}`,
+      );
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait();
+      const explorerLink = getExplorerLink("tx", receipt.hash);
+
+      setTxStatus(`✓ Anchored on Ritual Chain (Block: ${receipt.blockNumber})`);
+
+      // Clear status after 4 seconds
+      setTimeout(() => setTxStatus(null), 4000);
+      setTxLoading(false);
+      return true;
+    } catch (err) {
+      console.error("Blockchain error:", err);
+      setError(`Transaction failed: ${err.reason || err.message}`);
+      setTxLoading(false);
+      setTxStatus(null);
+      return false;
+    }
+  };
+
+  // ── Chat Functions ──
   const send = useCallback(
     async (question) => {
       if (!question.trim() || loading || sendInFlight.current) return;
+
+      // Check wallet connection and anchor prompt on-chain
+      if (!walletConnected) {
+        alert("Please connect your wallet first");
+        return;
+      }
+
       sendInFlight.current = true;
       setError(null);
       setSources([]);
-      const index = await getDocIndex();
-      const { searchChunks } = await import("../lib/search.js");
-      const hits = searchChunks(index, question, 4);
-      setSources(hits);
-      const context = hits.length
-        ? hits
-            .map((h) => `[${h.source} §${h.index}]\n${h.text}`)
-            .join("\n\n---\n\n")
-        : "No relevant context found.";
-      const userContent = `RITUAL DOCS CONTEXT:\n\n${context}\n\n---\n\nQUESTION: ${question}`;
-      const history = messages.slice(-6);
-      const apiMessages = [...history, { role: "user", content: userContent }];
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: question },
-        { role: "assistant", content: "" },
-      ]);
-      setLoading(true);
+
       try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: apiMessages }),
-        });
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop();
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              const token = parsed.choices?.[0]?.delta?.content;
-              if (token) {
-                setMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = {
-                    role: "assistant",
-                    content: next[next.length - 1].content + token,
-                  };
-                  return next;
-                });
-              }
-            } catch {}
-          }
+        // Anchor the prompt on-chain
+        const anchorSuccess = await anchorPromptOnChain(question);
+        if (!anchorSuccess) {
+          sendInFlight.current = false;
+          return;
         }
-        if (buf) {
-          const lines = buf.split("\n");
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data);
-              const token = parsed.choices?.[0]?.delta?.content;
-              if (token) {
-                setMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = {
-                    role: "assistant",
-                    content: next[next.length - 1].content + token,
-                  };
-                  return next;
-                });
-              }
-            } catch {}
+
+        // Proceed with chat message
+        const index = await getDocIndex();
+        const { searchChunks } = await import("../lib/search.js");
+        const hits = searchChunks(index, question, 4);
+        setSources(hits);
+        const context = hits.length
+          ? hits
+              .map((h) => `[${h.source} §${h.index}]\n${h.text}`)
+              .join("\n\n---\n\n")
+          : "No relevant context found.";
+        const userContent = `RITUAL DOCS CONTEXT:\n\n${context}\n\n---\n\nQUESTION: ${question}`;
+        const history = messages.slice(-6);
+        const apiMessages = [
+          ...history,
+          { role: "user", content: userContent },
+        ];
+        setMessages((prev) => [
+          ...prev,
+          { role: "user", content: question },
+          { role: "assistant", content: "" },
+        ]);
+        setLoading(true);
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: apiMessages }),
+          });
+          if (!res.ok) throw new Error(`API error ${res.status}`);
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                const token = parsed.choices?.[0]?.delta?.content;
+                if (token) {
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: next[next.length - 1].content + token,
+                    };
+                    return next;
+                  });
+                }
+              } catch {}
+            }
           }
+          if (buf) {
+            const lines = buf.split("\n");
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                const token = parsed.choices?.[0]?.delta?.content;
+                if (token) {
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    next[next.length - 1] = {
+                      role: "assistant",
+                      content: next[next.length - 1].content + token,
+                    };
+                    return next;
+                  });
+                }
+              } catch {}
+            }
+          }
+        } catch (err) {
+          setError(err.message);
+          setMessages((prev) => prev.slice(0, -1));
+        } finally {
+          setLoading(false);
+          sendInFlight.current = false;
         }
       } catch (err) {
+        console.error("Send error:", err);
         setError(err.message);
-        setMessages((prev) => prev.slice(0, -1));
-      } finally {
-        setLoading(false);
         sendInFlight.current = false;
       }
     },
-    [messages, loading],
+    [messages, loading, walletConnected],
   );
 
   const handleSubmit = () => {
@@ -297,16 +439,73 @@ export default function ChatApp() {
               </div>
             </div>
             <div style={S.headerRight}>
+              {!walletConnected ? (
+                <button
+                  className="wallet-btn"
+                  style={{
+                    ...S.walletBtn,
+                    background: "rgba(26,107,60,0.8)",
+                  }}
+                  onClick={connectWallet}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginRight: 6 }}
+                  >
+                    <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+                    <path d="M9 8c0-1.657 1.343-3 3-3s3 1.343 3 3-1.343 3-3 3-3-1.343-3-3z" />
+                    <path d="M12 14v5M9 17h6" />
+                  </svg>
+                  Connect Wallet
+                </button>
+              ) : (
+                <div style={S.walletConnectedPill}>
+                  <span style={{ fontSize: "0.75rem", color: "#22c55e" }}>
+                    ✓
+                  </span>
+                  <span style={S.statusLabel}>
+                    {formatAddress(walletAddress)}
+                  </span>
+                  <button
+                    onClick={disconnectWallet}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "rgba(255,255,255,0.7)",
+                      cursor: "pointer",
+                      padding: "0 6px",
+                      fontSize: "1.2rem",
+                      lineHeight: 1,
+                    }}
+                    title="Disconnect wallet"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              <div style={S.chainPill}>
+                <span style={{ fontSize: "0.7rem" }}>⛓️</span>
+                <span
+                  style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.8)" }}
+                >
+                  Ritual
+                </span>
+              </div>
               <div style={S.statusPill}>
                 <span
-                  className={loading ? "dot-pulse" : ""}
+                  className={loading || txLoading ? "dot-pulse" : ""}
                   style={{
                     ...S.statusDot,
-                    background: loading ? "#f59e0b" : "#22c55e",
+                    background: loading || txLoading ? "#f59e0b" : "#22c55e",
                   }}
                 />
                 <span style={S.statusLabel}>
-                  {loading ? "Thinking…" : "Ready"}
+                  {txLoading ? "Anchoring…" : loading ? "Thinking…" : "Ready"}
                 </span>
               </div>
               {messages.length > 0 && (
@@ -452,6 +651,23 @@ export default function ChatApp() {
                     {error}
                   </div>
                 )}
+                {txStatus && (
+                  <div className="msg-in" style={S.txStatusBox}>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <path d="M12 2v20M2 12h20" />
+                      <circle cx="12" cy="12" r="10" />
+                    </svg>
+                    {txStatus}
+                  </div>
+                )}
                 <div ref={bottomRef} />
               </div>
             )}
@@ -588,6 +804,10 @@ const CSS = `
   /* Icon btn */
   .icon-btn { transition: all 0.14s; }
   .icon-btn:hover { background: var(--g50) !important; color: var(--g700) !important; border-color: var(--g300) !important; }
+
+  /* Wallet btn */
+  .wallet-btn { transition: all 0.14s var(--ease); }
+  .wallet-btn:hover { background: rgba(26,107,60,1) !important; box-shadow: 0 0 0 8px rgba(26,107,60,0.15) !important; transform: scale(1.04) !important; }
 
   /* Clear */
   .clear-btn { transition: all 0.14s; }
@@ -947,6 +1167,41 @@ const S = {
     color: "rgba(255,255,255,0.9)",
     cursor: "pointer",
   },
+  walletBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(26,107,60,0.8)",
+    border: "1px solid rgba(34,197,94,0.3)",
+    borderRadius: 8,
+    color: "rgba(255,255,255,0.95)",
+    cursor: "pointer",
+    padding: "6px 12px",
+    fontSize: "0.78rem",
+    fontFamily: "var(--fs)",
+    fontWeight: 600,
+    transition: "all 0.14s",
+  },
+  walletConnectedPill: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    background: "rgba(26,107,60,0.6)",
+    border: "1px solid rgba(34,197,94,0.3)",
+    padding: "5px 10px",
+    borderRadius: 20,
+  },
+  chainPill: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    background: "rgba(59,130,246,0.2)",
+    border: "1px solid rgba(59,130,246,0.3)",
+    padding: "5px 10px",
+    borderRadius: 20,
+    fontSize: "0.75rem",
+    color: "rgba(255,255,255,0.85)",
+  },
 
   // ── Chat area
   chatArea: {
@@ -1147,6 +1402,23 @@ const S = {
     borderLeft: "3px solid #dc2626",
     borderRadius: 10,
     color: "#dc2626",
+    padding: "12px 16px",
+    fontSize: "0.84rem",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    maxWidth: 760,
+    margin: "0 auto",
+    width: "100%",
+  },
+
+  // ── Transaction Status
+  txStatusBox: {
+    background: "rgba(34,197,94,0.12)",
+    border: "1px solid rgba(34,197,94,0.3)",
+    borderLeft: "3px solid #22c55e",
+    borderRadius: 10,
+    color: "#22c55e",
     padding: "12px 16px",
     fontSize: "0.84rem",
     display: "flex",
